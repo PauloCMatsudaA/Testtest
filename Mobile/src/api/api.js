@@ -1,4 +1,3 @@
-// src/api/api.js
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
@@ -14,7 +13,6 @@ api.interceptors.request.use(
   async (config) => {
     try {
       const token = await AsyncStorage.getItem('@episee:token');
-      console.log('[API] Token recuperado:', token ? 'OK' : 'AUSENTE'); // ← adicione
       if (token) config.headers.Authorization = `Bearer ${token}`;
     } catch (e) {
       console.warn('[API] Erro ao obter token:', e);
@@ -34,7 +32,6 @@ api.interceptors.response.use(
   }
 );
 
-// Login padrão: admin@episee.com / admin123
 export const loginApi = async (email, senha) => {
   const params = new URLSearchParams();
   params.append('username', email);
@@ -60,7 +57,6 @@ export const logoutApi = async () => {
   await AsyncStorage.multiRemove(['@episee:token', '@episee:user']);
 };
 
-// ── Solicitações de EPI ───────────────────────────────────────────────────────
 export const criarSolicitacao = async (dados) => {
   const response = await api.post('/epi-requests/', {
     epi_type: dados.epi_type,
@@ -80,13 +76,11 @@ export const todasSolicitacoes = async () => {
   return response.data;
 };
 
-// ── Setores ───────────────────────────────────────────────────────────────────
 export const getSetores = async () => {
   const response = await api.get('/sectors/');
   return response.data;
 };
 
-// ── Chatbot ───────────────────────────────────────────────────────────────────
 const chatbotCliente = axios.create({
   baseURL: 'http://10.0.0.246:8001',
   timeout: 30000,
