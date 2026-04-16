@@ -10,14 +10,13 @@ router = APIRouter(prefix="/reports", tags=["Reports"])
 
 
 def get_ai_client():
-    from openai import AsyncOpenAI          
+    from openai import AsyncOpenAI
     if not settings.OPENAI_API_KEY:
         raise HTTPException(
             status_code=503,
             detail="OPENAI_API_KEY não configurada. Adicione ao .env"
         )
     return AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
-
 
 
 class ReportPayload(BaseModel):
@@ -30,7 +29,6 @@ class ReportPayload(BaseModel):
 
 class ReportResponse(BaseModel):
     analise: str
-
 
 
 @router.post("/generate-analysis", response_model=ReportResponse)
@@ -80,7 +78,7 @@ INSTRUÇÕES:
 6. Sem markdown, apenas texto corrido com parágrafos. Máximo 350 palavras."""
 
     try:
-        client_ai = get_ai_client()          # ← instancia aqui, não no topo
+        client_ai = get_ai_client()
         response = await client_ai.chat.completions.create(
             model="gpt-4o-mini",
             messages=[{"role": "user", "content": prompt}],
