@@ -1,4 +1,3 @@
-// src/navigation/AppNavigator.js — Navegação principal do EPIsee
 import React from 'react';
 import { View, ActivityIndicator, StyleSheet, Text, TouchableOpacity } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
@@ -127,7 +126,6 @@ const estilos = StyleSheet.create({
     fontSize:   11,
     fontWeight: '500',
   },
-
   botaoCentral: {
     top:              -20,
     justifyContent:   'center',
@@ -151,7 +149,6 @@ const estilos = StyleSheet.create({
     justifyContent:  'center',
     alignItems:      'center',
   },
-
   carregando: {
     flex:            1,
     justifyContent:  'center',
