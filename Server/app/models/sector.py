@@ -12,7 +12,6 @@ class Sector(Base):
     description = Column(Text, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
-    # Relationships
     users = relationship("User", back_populates="sector", lazy="selectin")
     cameras = relationship("Camera", back_populates="sector", lazy="selectin")
     occurrences = relationship("Occurrence", back_populates="sector", lazy="selectin")
