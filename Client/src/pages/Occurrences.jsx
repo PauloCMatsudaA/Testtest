@@ -18,309 +18,272 @@ function formatarDataModal(valor) {
   try {
     const d = typeof valor === 'string' ? parseISO(valor) : new Date(valor);
     return isValid(d) ? format(d, "dd/MM/yyyy 'às' HH:mm", { locale: ptBR }) : '—';
-  } catch { return '—'; }
+  } catch {
+    return '—';
+  }
 }
 
 export default function Occurrences() {
-  const [ocorrencias,       setOcorrencias]       = useState([]);
-  const [carregando,        setCarregando]         = useState(true);
-  const [erro,              setErro]               = useState('');
-  const [totalResultados,   setTotalResultados]    = useState(0);
+  const [ocorrencias,  setOcorrencias]  = useState([]);
+  const [loading,      setLoading]      = useState(true);
+  const [error,        setError]        = useState(null);
+  const [showFilters,  setShowFilters]  = useState(false);
+  const [busca,        setBusca]        = useState('');
+  const [filtros,      setFiltros]      = useState({ status: '', dataInicio: '', dataFim: '' });
+  const [pagina,       setPagina]       = useState(1);
+  const [totalPaginas, setTotalPaginas] = useState(1);
+  const [totalItems,   setTotalItems]   = useState(0);
+  const [modalOc,      setModalOc]      = useState(null);
 
-  const [statusFilter,  setStatusFilter]  = useState('');
-  const [startDate,     setStartDate]     = useState('');
-  const [endDate,       setEndDate]       = useState('');
-  const [searchTerm,    setSearchTerm]    = useState('');
-  const [currentPage,   setCurrentPage]  = useState(1);
-  const [selected,      setSelected]      = useState(null);
+  const POR_PAGINA = 20;
 
-  const perPage = 10;
-
-  const buscar = useCallback(async () => {
-    setCarregando(true);
-    setErro('');
+  const carregar = useCallback(async (pag = 1) => {
+    setLoading(true);
+    setError(null);
     try {
-      const params = {
-        skip:  (currentPage - 1) * perPage,
-        limit: perPage,
-      };
-      if (statusFilter) params.status    = statusFilter;
-      if (startDate)    params.start_date = startDate;
-      if (endDate)      params.end_date   = endDate;
+      const params = { skip: (pag - 1) * POR_PAGINA, limit: POR_PAGINA };
+      if (filtros.status)     params.status     = filtros.status;
+      if (filtros.dataInicio) params.start_date = filtros.dataInicio;
+      if (filtros.dataFim)    params.end_date   = filtros.dataFim;
 
-      const res = await ocorrenciasApi.listar(params);
-      const lista = res.data || [];
+      const data = await ocorrenciasApi.listar(params);
+      const lista = Array.isArray(data) ? data : (data.items ?? []);
+      const total = data.total ?? lista.length;
+
       setOcorrencias(lista);
-      setTotalResultados(lista.length < perPage
-        ? (currentPage - 1) * perPage + lista.length
-        : currentPage * perPage + 1
-      );
+      setTotalItems(total);
+      setTotalPaginas(Math.max(1, Math.ceil(total / POR_PAGINA)));
+      setPagina(pag);
     } catch (e) {
-      setErro('Não foi possível carregar as ocorrências.');
+      setError('Erro ao carregar ocorrências.');
     } finally {
-      setCarregando(false);
+      setLoading(false);
     }
-  }, [currentPage, statusFilter, startDate, endDate]);
+  }, [filtros]);
 
-  useEffect(() => {
-    buscar();
-  }, [buscar]);
+  useEffect(() => { carregar(1); }, [carregar]);
 
-  const filtradas = ocorrencias.filter((occ) => {
-    if (!searchTerm) return true;
-    const t = searchTerm.toLowerCase();
-    const camera = (occ.camera ?? occ.camera_id ?? '').toString().toLowerCase();
-    const epis   = Array.isArray(occ.epi_detected)
-      ? occ.epi_detected.join(' ').toLowerCase()
-      : '';
+  const ocFiltradas = ocorrencias.filter(oc => {
+    if (!busca.trim()) return true;
+    const q = busca.toLowerCase();
     return (
-      camera.includes(t) ||
-      epis.includes(t)   ||
-      String(occ.id).includes(t)
+      String(oc.camera_id ?? '').includes(q) ||
+      String(oc.sector_id ?? '').includes(q) ||
+      (oc.status ?? '').toLowerCase().includes(q) ||
+      (oc.epi_detected ?? []).join(' ').toLowerCase().includes(q)
     );
   });
 
-  const totalPages = Math.max(1, Math.ceil(totalResultados / perPage));
-
-  const limparFiltros = () => {
-    setStatusFilter('');
-    setStartDate('');
-    setEndDate('');
-    setSearchTerm('');
-    setCurrentPage(1);
+  const aplicarFiltros = (e) => {
+    e.preventDefault();
+    setShowFilters(false);
+    carregar(1);
   };
 
-  const campoModal = (occ) => ({
-    camera:     occ.camera    ?? occ.camera_id    ?? '—',
-    sector:     occ.sector    ?? occ.sector_id    ?? '—',
-    data:       formatarDataModal(occ.timestamp   ?? occ.datetime ?? occ.created_at),
-    confianca:  occ.confidence != null
-      ? occ.confidence <= 1
-        ? `${Math.round(occ.confidence * 100)}%`
-        : `${Math.round(occ.confidence)}%`
-      : '—',
-    epis: Array.isArray(occ.epi_detected)
-      ? occ.epi_detected
-      : typeof occ.epi_detected === 'string'
-        ? occ.epi_detected.split(',').map(s => s.trim()).filter(Boolean)
-        : occ.epis ?? [],
-    status:     occ.status,
-    notas:      occ.notes ?? '',
-    trabalhador: occ.worker ?? occ.worker_name ?? '—',
-  });
+  const limparFiltros = () => {
+    setFiltros({ status: '', dataInicio: '', dataFim: '' });
+    setBusca('');
+    setShowFilters(false);
+  };
 
   return (
-    <div className="space-y-4">
-      {/* Filtros */}
-      <div className="rounded-xl border border-slate-100 bg-white p-4 shadow-sm">
-        <div className="flex flex-wrap items-end gap-3">
-          {/* Busca local */}
-          <div className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
-            <Search size={16} className="text-slate-400" />
-            <input
-              type="text"
-              placeholder="Câmera, EPI, ID..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-40 bg-transparent text-sm outline-none placeholder:text-slate-400"
-            />
-          </div>
-
-          {/* Status */}
-          <div>
-            <label className="mb-1 block text-xs font-medium text-slate-500">Status</label>
-            <select
-              value={statusFilter}
-              onChange={(e) => { setStatusFilter(e.target.value); setCurrentPage(1); }}
-              className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700 outline-none focus:border-brand"
-            >
-              {STATUS_OPTS.map((s) => (
-                <option key={s.value} value={s.value}>{s.label}</option>
-              ))}
-            </select>
-          </div>
-
-          {/* De */}
-          <div>
-            <label className="mb-1 block text-xs font-medium text-slate-500">De</label>
-            <input
-              type="date"
-              value={startDate}
-              onChange={(e) => { setStartDate(e.target.value); setCurrentPage(1); }}
-              className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700 outline-none focus:border-brand"
-            />
-          </div>
-
-          {/* Até */}
-          <div>
-            <label className="mb-1 block text-xs font-medium text-slate-500">Até</label>
-            <input
-              type="date"
-              value={endDate}
-              onChange={(e) => { setEndDate(e.target.value); setCurrentPage(1); }}
-              className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700 outline-none focus:border-brand"
-            />
-          </div>
-
-          <button
-            onClick={limparFiltros}
-            className="flex items-center gap-1 rounded-lg px-3 py-2 text-sm text-slate-500 transition-colors hover:bg-slate-100"
-          >
-            <X size={14} /> Limpar
-          </button>
-
-          <button
-            onClick={() => buscar()}
-            className="flex items-center gap-1 rounded-lg px-3 py-2 text-sm text-brand transition-colors hover:bg-brand-l"
-          >
-            <RefreshCw size={14} /> Atualizar
-          </button>
+    <div className="occurrences-page">
+      <div className="occurrences-header">
+        <div>
+          <h1 className="occurrences-title">Ocorrências</h1>
+          <p className="occurrences-subtitle">
+            {totalItems > 0 ? `${totalItems} registros encontrados` : 'Monitoramento de conformidade'}
+          </p>
         </div>
-
-        <div className="mt-3 flex items-center gap-2">
-          <Filter size={14} className="text-slate-400" />
-          <span className="text-xs text-slate-400">
-            {filtradas.length} resultado{filtradas.length !== 1 ? 's' : ''} nesta página
-          </span>
+        <div className="occurrences-actions">
+          <button className="btn-refresh" onClick={() => carregar(pagina)} title="Atualizar">
+            <RefreshCw size={16} />
+          </button>
+          <button
+            className={`btn-filter ${showFilters ? 'active' : ''}`}
+            onClick={() => setShowFilters(v => !v)}
+          >
+            <Filter size={16} />
+            Filtros
+          </button>
         </div>
       </div>
 
-      {/* Tabela */}
-      <div className="rounded-xl border border-slate-100 bg-white shadow-sm">
-        {carregando ? (
-          <div className="flex justify-center py-12"><LoadingSpinner /></div>
-        ) : erro ? (
-          <div className="flex justify-center py-12 text-sm text-red-500">{erro}</div>
-        ) : (
-          <TabelaOcorrencias
-            ocorrencias={filtradas}
-            aoVerDetalhes={setSelected}
-          />
-        )}
+      {showFilters && (
+        <form className="filtros-panel" onSubmit={aplicarFiltros}>
+          <div className="filtros-grid">
+            <div className="filtro-group">
+              <label className="filtro-label">Busca local</label>
+              <div className="input-icon">
+                <Search size={14} className="input-icon-icon" />
+                <input
+                  className="filtro-input"
+                  placeholder="Câmera, setor, EPI…"
+                  value={busca}
+                  onChange={e => setBusca(e.target.value)}
+                />
+              </div>
+            </div>
 
-        {/* Paginação */}
-        {!carregando && totalPages > 1 && (
-          <div className="flex items-center justify-between border-t border-slate-100 px-5 py-3">
-            <span className="text-xs text-slate-400">Página {currentPage} de {totalPages}</span>
-            <div className="flex items-center gap-1">
+            <div className="filtro-group">
+              <label className="filtro-label">Status</label>
+              <select
+                className="filtro-select"
+                value={filtros.status}
+                onChange={e => setFiltros(f => ({ ...f, status: e.target.value }))}
+              >
+                {STATUS_OPTS.map(o => (
+                  <option key={o.value} value={o.value}>{o.label}</option>
+                ))}
+              </select>
+            </div>
+
+            <div className="filtro-group">
+              <label className="filtro-label">De</label>
+              <input
+                type="date"
+                className="filtro-input"
+                value={filtros.dataInicio}
+                onChange={e => setFiltros(f => ({ ...f, dataInicio: e.target.value }))}
+              />
+            </div>
+
+            <div className="filtro-group">
+              <label className="filtro-label">Até</label>
+              <input
+                type="date"
+                className="filtro-input"
+                value={filtros.dataFim}
+                onChange={e => setFiltros(f => ({ ...f, dataFim: e.target.value }))}
+              />
+            </div>
+          </div>
+
+          <div className="filtros-footer">
+            <button type="button" className="btn-limpar" onClick={limparFiltros}>
+              <X size={14} /> Limpar
+            </button>
+            <button type="submit" className="btn-aplicar">Aplicar filtros</button>
+          </div>
+        </form>
+      )}
+
+      {loading && (
+        <div className="loading-container">
+          <LoadingSpinner />
+        </div>
+      )}
+
+      {error && !loading && (
+        <div className="error-banner">
+          <span>{error}</span>
+          <button onClick={() => carregar(pagina)}>Tentar novamente</button>
+        </div>
+      )}
+
+      {!loading && !error && (
+        <>
+          <TabelaOcorrencias
+            ocorrencias={ocFiltradas}
+            onVerDetalhes={setModalOc}
+          />
+
+          {totalPaginas > 1 && (
+            <div className="paginacao">
               <button
-                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                disabled={currentPage === 1}
-                className="rounded-lg p-1.5 text-slate-500 transition-colors hover:bg-slate-100 disabled:opacity-40"
+                className="btn-pag"
+                onClick={() => carregar(pagina - 1)}
+                disabled={pagina <= 1}
               >
                 <ChevronLeft size={16} />
               </button>
-              {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-                let page;
-                if (totalPages <= 5)          page = i + 1;
-                else if (currentPage <= 3)    page = i + 1;
-                else if (currentPage >= totalPages - 2) page = totalPages - 4 + i;
-                else                          page = currentPage - 2 + i;
-                return (
-                  <button
-                    key={page}
-                    onClick={() => setCurrentPage(page)}
-                    className={`rounded-lg px-2.5 py-1 text-xs font-medium transition-colors ${
-                      currentPage === page
-                        ? 'bg-brand text-white'
-                        : 'text-slate-500 hover:bg-slate-100'
-                    }`}
-                  >
-                    {page}
-                  </button>
-                );
-              })}
+              <span className="paginacao-info">
+                Página {pagina} de {totalPaginas}
+              </span>
               <button
-                onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-                disabled={currentPage === totalPages}
-                className="rounded-lg p-1.5 text-slate-500 transition-colors hover:bg-slate-100 disabled:opacity-40"
+                className="btn-pag"
+                onClick={() => carregar(pagina + 1)}
+                disabled={pagina >= totalPaginas}
               >
                 <ChevronRight size={16} />
               </button>
             </div>
-          </div>
-        )}
-      </div>
+          )}
+        </>
+      )}
 
-      {/* Modal de detalhes */}
-      {selected && (() => {
-        const c = campoModal(selected);
-        return (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-            <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl fade-in">
-              <div className="mb-4 flex items-center justify-between">
-                <h3 className="text-lg font-semibold text-slate-800">
-                  Ocorrência #{String(selected.id).padStart(4, '0')}
-                </h3>
-                <button
-                  onClick={() => setSelected(null)}
-                  className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100"
-                >
-                  <X size={18} />
-                </button>
-              </div>
+      {!loading && !error && ocFiltradas.length === 0 && (
+        <div className="empty-state">
+          <p>Nenhuma ocorrência encontrada.</p>
+          {(filtros.status || filtros.dataInicio || filtros.dataFim || busca) && (
+            <button className="btn-limpar-empty" onClick={limparFiltros}>
+              Limpar filtros
+            </button>
+          )}
+        </div>
+      )}
 
-              <div className="space-y-3">
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <p className="text-xs text-slate-400">Câmera</p>
-                    <p className="text-sm font-medium text-slate-700">{c.camera}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-slate-400">Setor</p>
-                    <p className="text-sm font-medium text-slate-700">{c.sector}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-slate-400">Data/Hora</p>
-                    <p className="text-sm font-medium text-slate-700">{c.data}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-slate-400">Confiança</p>
-                    <p className="text-sm font-medium text-slate-700">{c.confianca}</p>
+      {modalOc && (
+        <div className="modal-overlay" onClick={() => setModalOc(null)}>
+          <div className="modal-box" onClick={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2 className="modal-title">Ocorrência #{modalOc.id}</h2>
+              <button className="modal-close" onClick={() => setModalOc(null)}>
+                <X size={18} />
+              </button>
+            </div>
+            <div className="modal-body">
+              <div className="modal-grid">
+                <div className="modal-field">
+                  <span className="modal-label">Status</span>
+                  <BadgeStatus status={modalOc.status} />
+                </div>
+                <div className="modal-field">
+                  <span className="modal-label">Data</span>
+                  <span className="modal-value">{formatarDataModal(modalOc.timestamp)}</span>
+                </div>
+                <div className="modal-field">
+                  <span className="modal-label">Câmera</span>
+                  <span className="modal-value">{modalOc.camera_id ?? '—'}</span>
+                </div>
+                <div className="modal-field">
+                  <span className="modal-label">Setor</span>
+                  <span className="modal-value">{modalOc.sector_id ?? '—'}</span>
+                </div>
+                <div className="modal-field">
+                  <span className="modal-label">Confiança</span>
+                  <span className="modal-value">
+                    {modalOc.confidence != null
+                      ? `${(modalOc.confidence * 100).toFixed(1)}%`
+                      : '—'}
+                  </span>
+                </div>
+                <div className="modal-field modal-field--full">
+                  <span className="modal-label">EPIs detectados</span>
+                  <div className="modal-epis">
+                    {modalOc.epi_detected?.length
+                      ? modalOc.epi_detected.map(e => (
+                          <span key={e} className="badge-epi">{e}</span>
+                        ))
+                      : <span className="modal-value">Nenhum</span>
+                    }
                   </div>
                 </div>
-
-                <div>
-                  <p className="text-xs text-slate-400">Status</p>
-                  <div className="mt-1"><BadgeStatus status={c.status} size="md" /></div>
-                </div>
-
-                <div>
-                  <p className="text-xs text-slate-400">EPIs Detectados</p>
-                  <div className="mt-1 flex flex-wrap gap-1.5">
-                    {c.epis.length > 0 ? c.epis.map((epi, i) => (
-                      <span key={i} className="rounded-lg bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-600">
-                        {epi}
-                      </span>
-                    )) : <span className="text-xs text-slate-400">—</span>}
-                  </div>
-                </div>
-
-                {c.notas && (
-                  <div>
-                    <p className="text-xs text-slate-400">Observações</p>
-                    <p className="mt-1 text-sm text-slate-600">{c.notas}</p>
+                {modalOc.image_path && (
+                  <div className="modal-field modal-field--full">
+                    <span className="modal-label">Imagem</span>
+                    <img
+                      src={`/api/occurrences/${modalOc.id}/image`}
+                      alt="Frame da ocorrência"
+                      className="modal-img"
+                    />
                   </div>
                 )}
-
-                <div className="rounded-lg bg-slate-50 p-3">
-                  <p className="text-xs text-slate-400">Trabalhador</p>
-                  <p className="text-sm font-medium text-slate-700">{c.trabalhador}</p>
-                </div>
-              </div>
-
-              <div className="mt-5 flex justify-end">
-                <button
-                  onClick={() => setSelected(null)}
-                  className="rounded-xl bg-slate-100 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-200"
-                >
-                  Fechar
-                </button>
               </div>
             </div>
           </div>
-        );
-      })()}
+        </div>
+      )}
     </div>
   );
 }
