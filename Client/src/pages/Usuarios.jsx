@@ -1,323 +1,242 @@
-import { useEffect, useMemo, useState } from 'react';
-import { Users, Plus, Pencil, Trash2, ShieldCheck } from 'lucide-react';
-import LoadingSpinner from '../components/LoadingSpinner';
-import { usuariosApi, setoresApi } from '../api/api';
+import { useState, useEffect } from 'react';
+import { Plus, Edit2, Trash2, X, User, Mail, Shield, Eye, EyeOff } from 'lucide-react';
+import { usuariosApi } from '../api/api';
 
 const ROLES = [
-  { value: 'gestor',      label: 'Gestor' },
-  { value: 'trabalhador', label: 'Trabalhador' },
+  { value: 'gestor',    label: 'Gestor'    },
+  { value: 'operador',  label: 'Operador'  },
+  { value: 'viewer',   label: 'Visualizador' },
 ];
 
-const FORM_INICIAL = {
-  name:      '',
-  email:     '',
-  password:  '',
-  role:      'trabalhador',
-  sector_id: '',
-  phone:     '',
-};
+function badgeRole(role) {
+  const map = {
+    gestor:   'badge-blue',
+    operador: 'badge-green',
+    viewer:   'badge-gray',
+    admin:    'badge-purple',
+  };
+  return <span className={`badge ${map[role] ?? 'badge-gray'}`}>{role}</span>;
+}
 
 export default function Usuarios() {
-  const [usuarios, setUsuarios]               = useState([]);
-  const [setores, setSetores]                 = useState([]);
-  const [carregando, setCarregando]           = useState(true);
-  const [salvando, setSalvando]               = useState(false);
-  const [erro, setErro]                       = useState('');
-  const [sucesso, setSucesso]                 = useState('');
-  const [modalAberto, setModalAberto]         = useState(false);
-  const [usuarioEditando, setUsuarioEditando] = useState(null);
-  const [form, setForm]                       = useState(FORM_INICIAL);
-  const [busca, setBusca]                     = useState('');
-  const [filtroPapel, setFiltroPapel]         = useState('');
+  const [usuarios,    setUsuarios]    = useState([]);
+  const [loading,     setLoading]     = useState(true);
+  const [error,       setError]       = useState(null);
+  const [modalAberto, setModalAberto] = useState(false);
+  const [editando,    setEditando]    = useState(null);
+  const [deletando,   setDeletando]   = useState(null);
+  const [showPwd,     setShowPwd]     = useState(false);
+  const [salvando,    setSalvando]    = useState(false);
+  const [form, setForm] = useState({ name: '', email: '', role: 'operador', password: '', is_active: true });
 
-  useEffect(() => { carregarDados(); }, []);
+  useEffect(() => { carregar(); }, []);
 
-  async function carregarDados() {
-    setCarregando(true);
-    setErro('');
+  async function carregar() {
+    setLoading(true);
+    setError(null);
     try {
-      const [usersRes, sectorsRes] = await Promise.all([
-        usuariosApi.listar(),
-        setoresApi.listar(),
-      ]);
-      setUsuarios(usersRes.data || []);
-      setSetores(sectorsRes.data || []);
-    } catch (e) {
-      setErro(e.response?.data?.detail || 'Não foi possível carregar os usuários.');
+      const data = await usuariosApi.listar();
+      setUsuarios(Array.isArray(data) ? data : (data.items ?? []));
+    } catch {
+      setError('Erro ao carregar usuários.');
     } finally {
-      setCarregando(false);
+      setLoading(false);
     }
   }
 
-  function abrirNovo() {
-    setUsuarioEditando(null);
-    setForm(FORM_INICIAL);
-    setErro('');
+  function abrirAdicionar() {
+    setEditando(null);
+    setForm({ name: '', email: '', role: 'operador', password: '', is_active: true });
+    setShowPwd(false);
     setModalAberto(true);
   }
 
-  function abrirEdicao(u) {
-    setUsuarioEditando(u);
-    setForm({
-      name:      u.name      || '',
-      email:     u.email     || '',
-      password:  '',
-      role:      u.role      || 'trabalhador',
-      sector_id: u.sector_id || '',
-      phone:     u.phone     || '',
-    });
-    setErro('');
+  function abrirEditar(u) {
+    setEditando(u);
+    setForm({ name: u.name ?? u.username ?? '', email: u.email ?? '', role: u.role ?? 'operador', password: '', is_active: u.is_active ?? true });
+    setShowPwd(false);
     setModalAberto(true);
   }
 
-  function fecharModal() {
-    setModalAberto(false);
-    setUsuarioEditando(null);
-    setForm(FORM_INICIAL);
-    setErro('');
-  }
-
-  function atualizar(e) {
-    const { name, value } = e.target;
-    setForm((prev) => ({ ...prev, [name]: value }));
-  }
-
-  async function salvar(e) {
-    e.preventDefault();
+  async function salvar() {
+    if (!form.name || !form.email) return;
     setSalvando(true);
-    setErro('');
-
-    const payload = {
-      name:      form.name,
-      email:     form.email,
-      role:      form.role,
-      sector_id: form.sector_id ? Number(form.sector_id) : null,
-      phone:     form.phone || null,
-    };
-
-    if (form.password) payload.password = form.password;
-
     try {
-      if (usuarioEditando) {
-        await usuariosApi.editar(usuarioEditando.id, payload);
-        setSucesso('Usuário atualizado com sucesso.');
+      const payload = { name: form.name, email: form.email, role: form.role, is_active: form.is_active };
+      if (form.password) payload.password = form.password;
+
+      if (editando) {
+        const updated = await usuariosApi.atualizar(editando.id, payload);
+        setUsuarios(prev => prev.map(u => (u.id === editando.id ? updated : u)));
       } else {
-        if (!form.password) {
-          setErro('A senha é obrigatória para novo usuário.');
-          setSalvando(false);
-          return;
-        }
-        await usuariosApi.criar({ ...payload, password: form.password });
-        setSucesso('Usuário criado com sucesso.');
+        if (!form.password) { alert('Senha obrigatória para novo usuário.'); return; }
+        const created = await usuariosApi.criar({ ...payload, password: form.password });
+        setUsuarios(prev => [...prev, created]);
       }
-      fecharModal();
-      await carregarDados();
-      setTimeout(() => setSucesso(''), 3000);
-    } catch (err) {
-      setErro(err.response?.data?.detail || 'Não foi possível salvar o usuário.');
+      setModalAberto(false);
+    } catch (e) {
+      alert(`Erro ao salvar: ${e.message ?? 'desconhecido'}`);
     } finally {
       setSalvando(false);
     }
   }
 
-  async function excluir(id) {
-    if (!window.confirm('Tem certeza que deseja excluir este usuário? Esta ação não pode ser desfeita.')) return;
+  async function confirmarDelete(id) {
     try {
-      await usuariosApi.excluir(id);
-      await carregarDados();
-      setSucesso('Usuário excluído com sucesso.');
-      setTimeout(() => setSucesso(''), 3000);
-    } catch (err) {
-      setErro(err.response?.data?.detail || 'Não foi possível excluir o usuário.');
+      await usuariosApi.deletar(id);
+      setUsuarios(prev => prev.filter(u => u.id !== id));
+    } catch (e) {
+      alert(`Erro ao deletar: ${e.message}`);
+    } finally {
+      setDeletando(null);
     }
   }
 
-  const usuariosFiltrados = useMemo(() => {
-    const termo = busca.toLowerCase();
-    return usuarios.filter((u) => {
-      const buscaOk =
-        u.name?.toLowerCase().includes(termo) ||
-        u.email?.toLowerCase().includes(termo) ||
-        u.sector?.name?.toLowerCase().includes(termo);
-      const papelOk = !filtroPapel || u.role === filtroPapel;
-      return buscaOk && papelOk;
-    });
-  }, [usuarios, busca, filtroPapel]);
-
-  function labelPapel(role) {
-    return ROLES.find((r) => r.value === role)?.label || role;
-  }
-
-  function classePapel(role) {
-    return role === 'gestor' ? 'badge badge-info' : 'badge badge-ok';
-  }
-
-  if (carregando) return <div className="page"><LoadingSpinner /></div>;
+  const totalAtivos   = usuarios.filter(u => u.is_active).length;
+  const totalGestores = usuarios.filter(u => u.role === 'gestor').length;
 
   return (
-    <div className="page page-enter">
-      <div className="page-header">
+    <div className="pg-wide">
+      <div className="row-between flex-wrap gap-3">
         <div>
-          <h1 className="page-title">Usuários</h1>
-          <p className="page-subtitle">Gerencie os usuários e seus papéis no sistema.</p>
+          <h1 className="pg-title">Usuários</h1>
+          <p className="sec-sub">{usuarios.length} cadastrados · {totalAtivos} ativos · {totalGestores} gestores</p>
         </div>
-        <button className="btn btn-primary" onClick={abrirNovo}>
-          <Plus size={16} />
-          Novo usuário
+        <button onClick={abrirAdicionar} className="btn-primary">
+          <Plus size={16} /> Novo Usuário
         </button>
       </div>
 
-      {erro    && <div className="alert alert-err"><span>{erro}</span></div>}
-      {sucesso && <div className="alert alert-ok"><span>{sucesso}</span></div>}
+      {loading && <p className="sec-sub text-center py-12">Carregando…</p>}
+      {error   && <p className="text-err text-sm text-center py-8">{error}</p>}
 
-      <div className="card">
-        <div className="card-body" style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', alignItems: 'flex-end' }}>
-          <div className="field" style={{ flex: '1 1 14rem' }}>
-            <label className="label" htmlFor="busca-usuario">Buscar</label>
-            <input
-              id="busca-usuario" className="input" type="text"
-              placeholder="Nome, e-mail ou setor"
-              value={busca} onChange={(e) => setBusca(e.target.value)}
-            />
-          </div>
-          <div className="field" style={{ flex: '0 1 12rem' }}>
-            <label className="label" htmlFor="filtro-papel">Papel</label>
-            <select
-              id="filtro-papel" className="input select"
-              value={filtroPapel} onChange={(e) => setFiltroPapel(e.target.value)}
-            >
-              <option value="">Todos</option>
-              {ROLES.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
-            </select>
-          </div>
-        </div>
-      </div>
-
-      {usuariosFiltrados.length === 0 ? (
-        <div className="card">
-          <div className="card-body" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '3rem', gap: '0.75rem' }}>
-            <Users size={36} color="var(--text-faint)" />
-            <h3 className="section-title">Nenhum usuário encontrado</h3>
-            <p className="section-sub">Cadastre um novo usuário ou ajuste os filtros.</p>
-          </div>
-        </div>
-      ) : (
-        <div className="card">
-          <div className="table-wrapper">
-            <table className="table">
-              <thead>
-                <tr>
-                  <th>Nome</th>
-                  <th>E-mail</th>
-                  <th>Papel</th>
-                  <th>Setor</th>
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody>
-                {usuariosFiltrados.map((u) => (
-                  <tr key={u.id}>
-                    <td>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.625rem' }}>
-                        <div style={{
-                          width: '2rem', height: '2rem', borderRadius: '9999px',
-                          background: 'var(--brand)', color: '#fff',
-                          display: 'flex', alignItems: 'center', justifyContent: 'center',
-                          fontSize: '0.75rem', fontWeight: 700, flexShrink: 0,
-                        }}>
-                          {u.name?.[0]?.toUpperCase() || '?'}
-                        </div>
-                        <span style={{ fontWeight: 500 }}>{u.name}</span>
-                      </div>
-                    </td>
-                    <td style={{ color: 'var(--text-muted)' }}>{u.email}</td>
-                    <td>
-                      <span className={classePapel(u.role)}>
-                        {u.role === 'gestor' && <ShieldCheck size={11} />}
-                        {labelPapel(u.role)}
-                      </span>
-                    </td>
-                    <td style={{ color: 'var(--text-muted)' }}>{u.sector?.name || '—'}</td>
-                    <td>
-                      <div style={{ display: 'flex', gap: '0.375rem', justifyContent: 'flex-end' }}>
-                        <button className="btn btn-ghost btn-sm btn-icon" onClick={() => abrirEdicao(u)} title="Editar">
-                          <Pencil size={14} />
-                        </button>
-                        <button className="btn btn-danger btn-sm btn-icon" onClick={() => excluir(u.id)} title="Excluir">
-                          <Trash2 size={14} />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
+      {!loading && !error && (
+        <div className="card overflow-hidden p-0">
+          <table className="w-full text-sm">
+            <thead className="border-b border-slate-100 bg-slate-50">
+              <tr>
+                {['Usuário', 'E-mail', 'Perfil', 'Status', 'Ações'].map(h => (
+                  <th key={h} className="px-4 py-3 text-left font-medium text-slate-500">{h}</th>
                 ))}
-              </tbody>
-            </table>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-50">
+              {usuarios.map(u => (
+                <tr key={u.id} className="hover:bg-slate-50 transition-colors">
+                  <td className="px-4 py-3">
+                    <div className="row gap-2">
+                      <div className="icon-box bg-blue-50">
+                        <User size={14} className="text-blue-500" />
+                      </div>
+                      <div>
+                        <p className="font-medium text-slate-800">{u.name ?? u.username}</p>
+                        <p className="sec-sub text-xs">#{u.id}</p>
+                      </div>
+                    </div>
+                  </td>
+                  <td className="px-4 py-3">
+                    <div className="row gap-1.5 text-slate-600">
+                      <Mail size={13} className="text-slate-400" />
+                      {u.email}
+                    </div>
+                  </td>
+                  <td className="px-4 py-3">{badgeRole(u.role)}</td>
+                  <td className="px-4 py-3">
+                    <span className={`badge ${u.is_active ? 'badge-ok' : 'badge-gray'}`}>
+                      {u.is_active ? 'Ativo' : 'Inativo'}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3">
+                    <div className="row gap-2">
+                      <button onClick={() => abrirEditar(u)} className="btn-icon" title="Editar">
+                        <Edit2 size={14} />
+                      </button>
+                      <button onClick={() => setDeletando(u)} className="btn-icon text-err hover:bg-red-50" title="Remover">
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {usuarios.length === 0 && (
+            <p className="text-center sec-sub py-10">Nenhum usuário cadastrado.</p>
+          )}
+        </div>
+      )}
+
+      {modalAberto && (
+        <div className="overlay">
+          <div className="modal fade-in">
+            <div className="modal-head">
+              <h3 className="modal-title">
+                <Shield size={18} className="text-brand" />
+                {editando ? 'Editar Usuário' : 'Novo Usuário'}
+              </h3>
+              <button onClick={() => setModalAberto(false)} className="btn-icon"><X size={18} /></button>
+            </div>
+
+            <div className="space-y-4">
+              <div className="field">
+                <label className="label">Nome</label>
+                <input className="input" placeholder="Nome completo" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} />
+              </div>
+              <div className="field">
+                <label className="label">E-mail</label>
+                <input className="input" type="email" placeholder="email@empresa.com" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} />
+              </div>
+              <div className="field">
+                <label className="label">Perfil</label>
+                <select className="input" value={form.role} onChange={e => setForm({ ...form, role: e.target.value })}>
+                  {ROLES.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
+                </select>
+              </div>
+              <div className="field">
+                <label className="label">{editando ? 'Nova Senha (opcional)' : 'Senha'}</label>
+                <div className="input-icon">
+                  <input
+                    className="input pr-10"
+                    type={showPwd ? 'text' : 'password'}
+                    placeholder={editando ? 'Deixe em branco para manter' : 'Senha'}
+                    value={form.password}
+                    onChange={e => setForm({ ...form, password: e.target.value })}
+                  />
+                  <button type="button" className="input-icon-btn" onClick={() => setShowPwd(v => !v)}>
+                    {showPwd ? <EyeOff size={15} /> : <Eye size={15} />}
+                  </button>
+                </div>
+              </div>
+              <label className="row gap-2 cursor-pointer">
+                <input type="checkbox" checked={form.is_active} onChange={e => setForm({ ...form, is_active: e.target.checked })} />
+                <span className="text-sm text-slate-700">Usuário ativo</span>
+              </label>
+            </div>
+
+            <div className="modal-foot">
+              <button onClick={() => setModalAberto(false)} className="btn-ghost">Cancelar</button>
+              <button onClick={salvar} disabled={salvando || !form.name || !form.email} className="btn-primary disabled:opacity-50">
+                {salvando ? 'Salvando…' : editando ? 'Salvar' : 'Criar'}
+              </button>
+            </div>
           </div>
         </div>
       )}
 
-      {/* Modal */}
-      {modalAberto && (
-        <div className="overlay" onClick={fecharModal}>
-          <div className="modal modal-lg fade-in" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <h2 className="modal-title">
-                {usuarioEditando ? 'Editar usuário' : 'Novo usuário'}
-              </h2>
+      {deletando && (
+        <div className="overlay">
+          <div className="modal-sm fade-in">
+            <div className="row gap-3 mb-4">
+              <div className="icon-box-lg bg-red-100"><Trash2 size={20} className="text-err" /></div>
+              <div>
+                <h3 className="font-semibold text-slate-800">Remover Usuário</h3>
+                <p className="sec-sub">Tem certeza que deseja remover <strong>{deletando.name ?? deletando.username}</strong>?</p>
+              </div>
             </div>
-            <form onSubmit={salvar} style={{ padding: '1.25rem 1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-              {erro && <div className="alert alert-err"><span>{erro}</span></div>}
-
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-                <div className="field" style={{ gridColumn: '1 / -1' }}>
-                  <label className="label" htmlFor="u-name">Nome completo</label>
-                  <input id="u-name" name="name" className="input" value={form.name}
-                    onChange={atualizar} placeholder="Ex.: João da Silva" required />
-                </div>
-                <div className="field">
-                  <label className="label" htmlFor="u-email">E-mail</label>
-                  <input id="u-email" name="email" type="email" className="input"
-                    value={form.email} onChange={atualizar}
-                    placeholder="joao@empresa.com" required />
-                </div>
-                <div className="field">
-                  <label className="label" htmlFor="u-phone">Telefone</label>
-                  <input id="u-phone" name="phone" className="input" value={form.phone}
-                    onChange={atualizar} placeholder="+5511999999999" />
-                </div>
-                <div className="field">
-                  <label className="label" htmlFor="u-password">
-                    {usuarioEditando ? 'Nova senha (deixe em branco para manter)' : 'Senha *'}
-                  </label>
-                  <input id="u-password" name="password" type="password" className="input"
-                    value={form.password} onChange={atualizar}
-                    placeholder={usuarioEditando ? '••••••••' : 'Mínimo 6 caracteres'}
-                    {...(!usuarioEditando && { required: true })} />
-                </div>
-                <div className="field">
-                  <label className="label" htmlFor="u-role">Papel</label>
-                  <select id="u-role" name="role" className="input select"
-                    value={form.role} onChange={atualizar}>
-                    {ROLES.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
-                  </select>
-                </div>
-                <div className="field">
-                  <label className="label" htmlFor="u-sector">Setor</label>
-                  <select id="u-sector" name="sector_id" className="input select"
-                    value={form.sector_id} onChange={atualizar}>
-                    <option value="">Selecione um setor</option>
-                    {setores.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-                  </select>
-                </div>
-              </div>
-
-              <div className="modal-footer">
-                <button type="button" className="btn btn-secondary" onClick={fecharModal}>Cancelar</button>
-                <button type="submit" className="btn btn-primary" disabled={salvando}>
-                  {salvando ? 'Salvando...' : 'Salvar usuário'}
-                </button>
-              </div>
-            </form>
+            <div className="flex justify-end gap-2">
+              <button onClick={() => setDeletando(null)} className="btn-ghost">Cancelar</button>
+              <button onClick={() => confirmarDelete(deletando.id)} className="btn bg-err text-white hover:bg-red-600">Remover</button>
+            </div>
           </div>
         </div>
       )}
