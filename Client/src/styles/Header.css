@@ -1,0 +1,43 @@
+.search-icon {
+  color: var(--text-faint);
+  flex-shrink: 0;
+}
+
+.notif-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+}
+
+.notif-dropdown {
+  padding: 0.5rem;
+}
+
+.notif-empty {
+  text-align: center;
+  padding: 1.5rem 1rem;
+  color: var(--text-faint);
+  font-size: 0.85rem;
+}
+
+.notif-item--lida {
+  opacity: 0.5;
+}
+
+.notif-item-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.notif-unread-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #3b82f6;
+  flex-shrink: 0;
+}
+
+.notif-dot--err  { background: #ef4444; }
+.notif-dot--warn { background: #f59e0b; }
+.notif-dot--info { background: #3b82f6; }
+.notif-dot--default { background: #6b7280; }
