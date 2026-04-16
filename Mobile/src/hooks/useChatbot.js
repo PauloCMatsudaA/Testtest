@@ -1,4 +1,3 @@
-// src/hooks/useChatbot.js — Chat state management hook
 import { useState, useCallback, useRef } from 'react';
 import { chatbotApi } from '../api/api';
 
@@ -16,10 +15,6 @@ const QUICK_QUESTIONS = [
   'Prazo de vida útil do capacete',
 ];
 
-/**
- * Manages chatbot conversation state.
- * @param {string} userPhone  — unique user identifier for conversation history
- */
 export function useChatbot(userPhone = 'app-user') {
   const [messages, setMessages]   = useState([WELCOME_MESSAGE]);
   const [isLoading, setIsLoading] = useState(false);
