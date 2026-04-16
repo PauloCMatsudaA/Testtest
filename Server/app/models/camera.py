@@ -9,13 +9,12 @@ class Camera(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String(100), nullable=False)
-    location = Column(String(255), nullable=True)          # ← adicionado
-    sector_id = Column(Integer, ForeignKey("sectors.id"), nullable=True)  # ← nullable
+    location = Column(String(255), nullable=True)
+    sector_id = Column(Integer, ForeignKey("sectors.id"), nullable=True)
     rtsp_url = Column(String(500), nullable=True)
     is_active = Column(Boolean, default=True, nullable=False)
     last_seen = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
-    # Relationships
     sector = relationship("Sector", back_populates="cameras")
     occurrences = relationship("Occurrence", back_populates="camera", lazy="selectin")
