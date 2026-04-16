@@ -1,25 +1,17 @@
-// src/contexts/AuthContext.js — Contexto de autenticação do EPIsee
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { loginApi } from '../api/api';
 
-// Chaves de armazenamento local
 const STORAGE_TOKEN_KEY = '@episee:token';
 const STORAGE_USER_KEY = '@episee:user';
 
-// Criação do contexto
 const AuthContext = createContext(null);
 
-/**
- * Provider de autenticação — envolve toda a aplicação
- * Fornece: user, token, loading, login(), logout()
- */
 export function AuthProvider({ children }) {
   const [user, setUser]       = useState(null);
   const [token, setToken]     = useState(null);
-  const [loading, setLoading] = useState(true); // true enquanto carrega do storage
+  const [loading, setLoading] = useState(true);
 
-  // ── Carrega sessão persistida ao iniciar o app ──────────────────────────
   useEffect(() => {
     const carregarSessao = async () => {
       try {
@@ -45,17 +37,9 @@ export function AuthProvider({ children }) {
     carregarSessao();
   }, []);
 
-  // ── Login ───────────────────────────────────────────────────────────────
-  /**
-   * Autentica o trabalhador e persiste a sessão
-   * @param {string} email
-   * @param {string} senha
-   * @throws {Error} Se as credenciais forem inválidas
-   */
   const login = async (email, senha) => {
     const dados = await loginApi(email, senha);
 
-    // Persiste no storage local
     await AsyncStorage.multiSet([
       [STORAGE_TOKEN_KEY, dados.token],
       [STORAGE_USER_KEY, JSON.stringify(dados.user)],
@@ -65,10 +49,6 @@ export function AuthProvider({ children }) {
     setUser(dados.user);
   };
 
-  // ── Logout ──────────────────────────────────────────────────────────────
-  /**
-   * Remove a sessão e redireciona para o Login
-   */
   const logout = async () => {
     try {
       await AsyncStorage.multiRemove([STORAGE_TOKEN_KEY, STORAGE_USER_KEY]);
@@ -80,7 +60,6 @@ export function AuthProvider({ children }) {
     }
   };
 
-  // ── Valor do contexto ───────────────────────────────────────────────────
   const value = {
     user,
     token,
@@ -97,10 +76,6 @@ export function AuthProvider({ children }) {
   );
 }
 
-/**
- * Hook para consumir o contexto de autenticação
- * @returns {{ user, token, loading, isAutenticado, login, logout }}
- */
 export function useAuth() {
   const context = useContext(AuthContext);
   if (!context) {
