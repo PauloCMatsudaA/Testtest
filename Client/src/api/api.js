@@ -27,7 +27,6 @@ cliente.interceptors.response.use(
   },
 );
 
-// ── Auth ──────────────────────────────────────────────────────────────────────
 export const autenticacaoApi = {
   login: (email, senha) =>
     cliente.post(
@@ -39,17 +38,14 @@ export const autenticacaoApi = {
   me: () => cliente.get("/api/auth/me"),
 };
 
-// ── Usuários ──────────────────────────────────────────────────────────────────
 export const usuariosApi = {
   listar:    (filtros)   => cliente.get("/api/users/", { params: filtros }),
   buscarPor: (id)        => cliente.get(`/api/users/${id}`),
-  // ✅ criar aponta para /api/auth/register (única rota de criação no backend)
   criar:     (dados)     => cliente.post("/api/auth/register", dados),
   editar:    (id, dados) => cliente.patch(`/api/users/${id}`, dados),
   excluir:   (id)        => cliente.delete(`/api/users/${id}`),
 };
 
-// ── Ocorrências — ✅ barra final obrigatória ──────────────────────────────────
 export const ocorrenciasApi = {
   listar:    (filtros) => cliente.get("/api/occurrences/", { params: filtros }),
   buscarPor: (id)      => cliente.get(`/api/occurrences/${id}`),
