@@ -3,11 +3,9 @@ import { format, parseISO, isValid } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { Eye } from 'lucide-react';
 
-// ── Utilitário de data seguro ─────────────────────────────────────────────────
 function formatarData(valor) {
   if (!valor) return '—';
   try {
-    // O backend retorna ISO string (ex: "2026-04-14T14:30:00")
     const data = typeof valor === 'string' ? parseISO(valor) : new Date(valor);
     if (!isValid(data)) return '—';
     return format(data, 'dd/MM/yyyy HH:mm', { locale: ptBR });
@@ -21,11 +19,8 @@ function celulasCabecalho(compacto) {
     <tr className="border-b border-slate-100">
       {['ID', 'Câmera', !compacto && 'Setor', 'EPIs', 'Status', !compacto && 'Confiança', 'Data/Hora', null]
         .filter(Boolean)
-        .map((coluna) => (
-          <th
-            key={coluna}
-            className="whitespace-nowrap px-4 py-3 text-xs font-semibold uppercase tracking-wider text-slate-400"
-          >
+        .map(coluna => (
+          <th key={coluna} className="whitespace-nowrap px-4 py-3 text-xs font-semibold uppercase tracking-wider text-slate-400">
             {coluna}
           </th>
         ))}
@@ -34,19 +29,13 @@ function celulasCabecalho(compacto) {
 }
 
 function LinhaOcorrencia({ occ, compacto, aoVerDetalhes }) {
-  const idFormatado = `#${String(occ.id).padStart(4, '0')}`;
-
-  // ✅ Tenta os dois nomes possíveis: "timestamp" (backend real) ou "datetime" (mock)
+  const idFormatado   = `#${String(occ.id).padStart(4, '0')}`;
   const dataFormatada = formatarData(occ.timestamp ?? occ.datetime ?? occ.created_at);
 
-  // Confiança: backend retorna 0-1 (float), dashboard pode passar 0-100
   const confiancaPct = occ.confidence != null
-    ? occ.confidence <= 1
-      ? Math.round(occ.confidence * 100)   // 0.91 → 91
-      : Math.round(occ.confidence)          // 91 → 91
+    ? occ.confidence <= 1 ? Math.round(occ.confidence * 100) : Math.round(occ.confidence)
     : 0;
 
-  // EPIs: backend retorna array JSON ou string separada por vírgula
   const listaEpis = Array.isArray(occ.epi_detected)
     ? occ.epi_detected
     : typeof occ.epi_detected === 'string'
@@ -56,45 +45,30 @@ function LinhaOcorrencia({ occ, compacto, aoVerDetalhes }) {
   return (
     <tr className="transition-colors hover:bg-slate-50/50">
       <td className="whitespace-nowrap px-4 py-3 font-mono text-xs text-slate-500">{idFormatado}</td>
-      <td className="whitespace-nowrap px-4 py-3 font-medium text-slate-700">
-        {occ.camera ?? occ.camera_id ?? '—'}
-      </td>
+      <td className="whitespace-nowrap px-4 py-3 font-medium text-slate-700">{occ.camera ?? occ.camera_id ?? '—'}</td>
 
       {!compacto && (
-        <td className="whitespace-nowrap px-4 py-3 text-slate-600">
-          {occ.sector ?? occ.sector_id ?? '—'}
-        </td>
+        <td className="whitespace-nowrap px-4 py-3 text-slate-600">{occ.sector ?? occ.sector_id ?? '—'}</td>
       )}
 
       <td className="px-4 py-3">
         <div className="flex flex-wrap gap-1">
-          {listaEpis.length > 0 ? (
-            listaEpis.map((epi, i) => (
-              <span
-                key={i}
-                className="inline-block rounded-md bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600"
-              >
-                {epi}
-              </span>
-            ))
-          ) : (
-            <span className="text-xs text-slate-400">—</span>
-          )}
+          {listaEpis.length > 0
+            ? listaEpis.map((epi, i) => (
+                <span key={i} className="inline-block rounded-md bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600">{epi}</span>
+              ))
+            : <span className="text-xs text-slate-400">—</span>
+          }
         </div>
       </td>
 
-      <td className="whitespace-nowrap px-4 py-3">
-        <BadgeStatus status={occ.status} />
-      </td>
+      <td className="whitespace-nowrap px-4 py-3"><BadgeStatus status={occ.status} /></td>
 
       {!compacto && (
         <td className="whitespace-nowrap px-4 py-3">
           <div className="flex items-center gap-2">
             <div className="h-1.5 w-16 overflow-hidden rounded-full bg-slate-100">
-              <div
-                className="h-full rounded-full bg-brand"
-                style={{ width: `${confiancaPct}%` }}
-              />
+              <div className="h-full rounded-full bg-brand" style={{ width: `${confiancaPct}%` }} />
             </div>
             <span className="text-xs text-slate-500">{confiancaPct}%</span>
           </div>
@@ -109,8 +83,7 @@ function LinhaOcorrencia({ occ, compacto, aoVerDetalhes }) {
             onClick={() => aoVerDetalhes(occ)}
             className="inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-medium text-brand hover:bg-brand-l transition-colors"
           >
-            <Eye size={14} />
-            Detalhes
+            <Eye size={14} /> Detalhes
           </button>
         </td>
       )}
@@ -126,19 +99,13 @@ export default function TabelaOcorrencias({ ocorrencias = [], aoVerDetalhes, com
       </div>
     );
   }
-
   return (
     <div className="overflow-x-auto">
       <table className="w-full text-left text-sm">
         <thead>{celulasCabecalho(compacto)}</thead>
         <tbody className="divide-y divide-slate-50">
-          {ocorrencias.map((occ) => (
-            <LinhaOcorrencia
-              key={occ.id}
-              occ={occ}
-              compacto={compacto}
-              aoVerDetalhes={aoVerDetalhes}
-            />
+          {ocorrencias.map(occ => (
+            <LinhaOcorrencia key={occ.id} occ={occ} compacto={compacto} aoVerDetalhes={aoVerDetalhes} />
           ))}
         </tbody>
       </table>

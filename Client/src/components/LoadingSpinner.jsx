@@ -1,8 +1,8 @@
 import clsx from 'clsx';
 
 const tamanhos = {
-  p: { classe: 'h-4 w-4', borda: '2px'  },
-  m: { classe: 'h-8 w-8', borda: '3px'  },
+  p: { classe: 'h-4 w-4',   borda: '2px' },
+  m: { classe: 'h-8 w-8',   borda: '3px' },
   g: { classe: 'h-12 w-12', borda: '4px' },
 };
 
