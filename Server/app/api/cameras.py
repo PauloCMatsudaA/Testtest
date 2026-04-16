@@ -101,10 +101,8 @@ async def start_detection(
     if not camera.rtsp_url:
         raise HTTPException(status_code=400, detail="Câmera sem URL RTSP configurada.")
 
-    # Inicia o stream HLS (player no frontend)
     iniciar_hls(camera_id, camera.rtsp_url)
 
-    # Inicia a detecção YOLOv8 se o modelo existir e não estiver rodando já
     modelo_existe = os.path.exists(MODEL_PATH)
     deteccao_ativa = camera_id in tarefas_deteccao and not tarefas_deteccao[camera_id].done()
 
@@ -146,7 +144,6 @@ async def stop_detection(
     if not camera:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Câmera não encontrada")
 
-    # Para HLS e detecção YOLOv8
     parar_hls(camera_id)
 
     return DetectionControl(
