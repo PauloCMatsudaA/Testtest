@@ -1,4 +1,3 @@
-// src/screens/LoginScreen.js — Tela de login do EPIsee
 import React, { useState } from 'react';
 import {
   View,
@@ -16,7 +15,6 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../contexts/AuthContext';
 
-// ── Constantes ────────────────────────────────────────────────────────────────
 const CORES = {
   primaria:   '#F97316',
   primariaEscura: '#EA6C0A',
@@ -33,19 +31,15 @@ const CORES = {
 export default function LoginScreen() {
   const { login } = useAuth();
 
-  // Estado do formulário
   const [email, setEmail]         = useState('');
   const [senha, setSenha]         = useState('');
   const [mostrarSenha, setMostrarSenha] = useState(false);
   const [carregando, setCarregando] = useState(false);
   const [erro, setErro]           = useState('');
 
-  // ── Validação e envio ─────────────────────────────────────────────────────
   const handleLogin = async () => {
-    // Limpa erro anterior
     setErro('');
 
-    // Validação básica
     if (!email.trim()) {
       setErro('Informe seu e-mail para continuar.');
       return;
@@ -58,7 +52,6 @@ export default function LoginScreen() {
     setCarregando(true);
     try {
       await login(email.trim().toLowerCase(), senha);
-      // Autenticação OK — o AppNavigator redireciona automaticamente
     } catch (err) {
       setErro(err.message || 'Credenciais inválidas. Tente novamente.');
     } finally {
@@ -66,7 +59,6 @@ export default function LoginScreen() {
     }
   };
 
-  // ── Preenche credenciais de demo ──────────────────────────────────────────
   const preencherDemo = () => {
     setEmail('demo@episee.com');
     setSenha('123456');
@@ -88,9 +80,7 @@ export default function LoginScreen() {
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >
-          {/* ── Logo ─────────────────────────────────────────────────────── */}
           <View style={estilos.logoContainer}>
-            {/* Anel decorativo */}
             <View style={estilos.logoAnel}>
               <View style={estilos.logoAnelInterno}>
                 <Ionicons name="shield-checkmark" size={56} color={CORES.primaria} />
@@ -100,11 +90,9 @@ export default function LoginScreen() {
             <Text style={estilos.tagline}>Sua segurança em primeiro lugar</Text>
           </View>
 
-          {/* ── Card do formulário ────────────────────────────────────────── */}
           <View style={estilos.card}>
             <Text style={estilos.cardTitulo}>Acessar minha conta</Text>
 
-            {/* Campo e-mail */}
             <View style={estilos.campoContainer}>
               <Text style={estilos.campoLabel}>E-mail</Text>
               <View style={estilos.inputWrapper}>
@@ -123,14 +111,13 @@ export default function LoginScreen() {
               </View>
             </View>
 
-            {/* Campo senha */}
             <View style={estilos.campoContainer}>
               <Text style={estilos.campoLabel}>Senha</Text>
               <View style={estilos.inputWrapper}>
                 <Ionicons name="lock-closed-outline" size={18} color={CORES.slate400} style={estilos.inputIcone} />
                 <TextInput
-                  style={[estilos.input, estilos.inputSenha]}
-                  placeholder="••••••••"
+                  style={[estilos.input, { flex: 1 }]}
+                  placeholder="Sua senha"
                   placeholderTextColor={CORES.slate400}
                   value={senha}
                   onChangeText={(t) => { setSenha(t); setErro(''); }}
@@ -138,12 +125,9 @@ export default function LoginScreen() {
                   autoCapitalize="none"
                   editable={!carregando}
                 />
-                <TouchableOpacity
-                  onPress={() => setMostrarSenha(!mostrarSenha)}
-                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                >
+                <TouchableOpacity onPress={() => setMostrarSenha(!mostrarSenha)} style={estilos.olhoBtn}>
                   <Ionicons
-                    name={mostrarSenha ? 'eye-outline' : 'eye-off-outline'}
+                    name={mostrarSenha ? 'eye-off-outline' : 'eye-outline'}
                     size={18}
                     color={CORES.slate400}
                   />
@@ -151,231 +135,89 @@ export default function LoginScreen() {
               </View>
             </View>
 
-            {/* Mensagem de erro inline */}
             {erro ? (
               <View style={estilos.erroContainer}>
-                <Ionicons name="alert-circle" size={16} color={CORES.erro} />
+                <Ionicons name="alert-circle-outline" size={16} color={CORES.erro} />
                 <Text style={estilos.erroTexto}>{erro}</Text>
               </View>
             ) : null}
 
-            {/* Botão de login */}
             <TouchableOpacity
+              style={[estilos.botaoEntrar, carregando && estilos.botaoDesabilitado]}
               onPress={handleLogin}
-              activeOpacity={0.85}
               disabled={carregando}
-              style={estilos.botaoWrapper}
+              activeOpacity={0.85}
             >
-              <LinearGradient
-                colors={[CORES.primaria, CORES.primariaEscura]}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 0 }}
-                style={estilos.botao}
-              >
-                {carregando ? (
-                  <ActivityIndicator size="small" color={CORES.branco} />
-                ) : (
-                  <>
-                    <Ionicons name="log-in-outline" size={20} color={CORES.branco} />
-                    <Text style={estilos.botaoTexto}>Entrar</Text>
-                  </>
-                )}
-              </LinearGradient>
+              {carregando ? (
+                <ActivityIndicator size="small" color={CORES.branco} />
+              ) : (
+                <Text style={estilos.botaoEntrarTexto}>Entrar</Text>
+              )}
+            </TouchableOpacity>
+
+            <TouchableOpacity style={estilos.botaoDemo} onPress={preencherDemo}>
+              <Text style={estilos.botaoDemoTexto}>Usar credenciais de demo</Text>
             </TouchableOpacity>
           </View>
 
-          {/* ── Credenciais de demo ───────────────────────────────────────── */}
-          <TouchableOpacity
-            style={estilos.demoContainer}
-            onPress={preencherDemo}
-            activeOpacity={0.7}
-          >
-            <Ionicons name="information-circle-outline" size={15} color={CORES.slate400} />
-            <Text style={estilos.demoTexto}>
-              Demo: <Text style={estilos.demoCredencial}>demo@episee.com</Text>
-              {' / '}
-              <Text style={estilos.demoCredencial}>123456</Text>
-              {' — Toque para preencher'}
-            </Text>
-          </TouchableOpacity>
-
-          {/* Rodapé */}
-          <Text style={estilos.rodape}>EPIsee v1.0.0 · Segurança do Trabalho</Text>
+          <Text style={estilos.rodape}>EPIsee · Segurança do Trabalho</Text>
         </ScrollView>
       </KeyboardAvoidingView>
     </LinearGradient>
   );
 }
 
-// ── Estilos ───────────────────────────────────────────────────────────────────
 const estilos = StyleSheet.create({
-  gradiente: {
-    flex: 1,
-  },
-  keyboardAvoid: {
-    flex: 1,
-  },
-  scroll: {
-    flexGrow: 1,
-    justifyContent: 'center',
-    paddingHorizontal: 24,
-    paddingTop: 60,
-    paddingBottom: 40,
-  },
-
-  // Logo
-  logoContainer: {
-    alignItems: 'center',
-    marginBottom: 40,
-  },
+  gradiente: { flex: 1 },
+  keyboardAvoid: { flex: 1 },
+  scroll: { flexGrow: 1, justifyContent: 'center', paddingHorizontal: 24, paddingVertical: 40 },
+  logoContainer: { alignItems: 'center', marginBottom: 32 },
   logoAnel: {
-    width: 110,
-    height: 110,
-    borderRadius: 55,
-    backgroundColor: 'rgba(249, 115, 22, 0.12)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 16,
+    width: 110, height: 110, borderRadius: 55,
+    borderWidth: 1, borderColor: 'rgba(249,115,22,0.3)',
+    justifyContent: 'center', alignItems: 'center', marginBottom: 16,
   },
   logoAnelInterno: {
-    width: 82,
-    height: 82,
-    borderRadius: 41,
-    backgroundColor: 'rgba(249, 115, 22, 0.18)',
-    justifyContent: 'center',
-    alignItems: 'center',
+    width: 88, height: 88, borderRadius: 44,
+    backgroundColor: 'rgba(249,115,22,0.12)',
+    justifyContent: 'center', alignItems: 'center',
   },
-  logoTexto: {
-    fontSize: 38,
-    fontWeight: '800',
-    color: '#FFFFFF',
-    letterSpacing: 1,
-    marginBottom: 8,
-  },
-  tagline: {
-    fontSize: 15,
-    color: '#94A3B8',
-    letterSpacing: 0.3,
-  },
-
-  // Card do formulário
+  logoTexto: { fontSize: 32, fontWeight: '800', color: '#FFFFFF', letterSpacing: 1 },
+  tagline: { fontSize: 14, color: 'rgba(255,255,255,0.5)', marginTop: 6 },
   card: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 20,
+    backgroundColor: '#FFFFFF', borderRadius: 20,
     padding: 24,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.15,
-    shadowRadius: 24,
-    elevation: 12,
-    marginBottom: 20,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.2, shadowRadius: 24, elevation: 10,
   },
-  cardTitulo: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#0F172A',
-    marginBottom: 20,
-  },
-
-  // Campos
-  campoContainer: {
-    marginBottom: 16,
-  },
-  campoLabel: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#475569',
-    marginBottom: 6,
-    marginLeft: 2,
-  },
+  cardTitulo: { fontSize: 20, fontWeight: '800', color: '#0F172A', marginBottom: 20, textAlign: 'center' },
+  campoContainer: { marginBottom: 16 },
+  campoLabel: { fontSize: 13, fontWeight: '600', color: '#334155', marginBottom: 6 },
   inputWrapper: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-    borderRadius: 8,
-    backgroundColor: '#FAFAFA',
-    paddingHorizontal: 12,
-    height: 50,
+    flexDirection: 'row', alignItems: 'center',
+    borderWidth: 1.5, borderColor: '#E2E8F0',
+    borderRadius: 12, paddingHorizontal: 12, height: 50,
+    backgroundColor: '#F8FAFC',
   },
-  inputIcone: {
-    marginRight: 8,
-  },
-  input: {
-    flex: 1,
-    fontSize: 15,
-    color: '#0F172A',
-    height: 50,
-  },
-  inputSenha: {
-    flex: 1,
-  },
-
-  // Erro
+  inputIcone: { marginRight: 8 },
+  input: { flex: 1, fontSize: 15, color: '#0F172A', height: 50 },
+  olhoBtn: { padding: 4 },
   erroContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#FEE2E2',
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    marginBottom: 12,
-    gap: 8,
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: '#FEE2E2', borderRadius: 8,
+    padding: 10, marginBottom: 12, gap: 6,
   },
-  erroTexto: {
-    fontSize: 13,
-    color: '#EF4444',
-    flex: 1,
-    fontWeight: '500',
-  },
-
-  // Botão
-  botaoWrapper: {
+  erroTexto: { fontSize: 13, color: '#EF4444', flex: 1 },
+  botaoEntrar: {
+    backgroundColor: '#F97316', borderRadius: 12,
+    height: 52, justifyContent: 'center', alignItems: 'center',
     marginTop: 4,
-    borderRadius: 12,
-    overflow: 'hidden',
+    shadowColor: '#F97316', shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.35, shadowRadius: 10, elevation: 6,
   },
-  botao: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 16,
-    gap: 8,
-    borderRadius: 12,
-  },
-  botaoTexto: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: '700',
-    letterSpacing: 0.3,
-  },
-
-  // Demo
-  demoContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.06)',
-    borderRadius: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    gap: 6,
-  },
-  demoTexto: {
-    fontSize: 12,
-    color: '#94A3B8',
-    textAlign: 'center',
-  },
-  demoCredencial: {
-    color: '#F97316',
-    fontWeight: '600',
-  },
-
-  // Rodapé
-  rodape: {
-    textAlign: 'center',
-    fontSize: 11,
-    color: '#475569',
-    marginTop: 24,
-  },
+  botaoDesabilitado: { opacity: 0.7 },
+  botaoEntrarTexto: { fontSize: 16, fontWeight: '700', color: '#FFFFFF' },
+  botaoDemo: { marginTop: 14, alignItems: 'center', padding: 8 },
+  botaoDemoTexto: { fontSize: 13, color: '#94A3B8', fontWeight: '500' },
+  rodape: { textAlign: 'center', fontSize: 12, color: 'rgba(255,255,255,0.3)', marginTop: 24 },
 });
