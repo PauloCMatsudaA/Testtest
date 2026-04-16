@@ -1,7 +1,3 @@
-"""
-seed_db.py — Popula o banco com dados realistas para visualização dos gráficos.
-Execute uma vez: python seed_db.py
-"""
 import asyncio
 import random
 from datetime import datetime, timedelta
@@ -29,13 +25,11 @@ async def seed():
         await conn.run_sync(Base.metadata.create_all)
 
     async with AsyncSessionLocal() as db:
-        # ── Setores ──────────────────────────────────────────────────────────
         setor_nomes = ["Produção", "Manutenção", "Almoxarifado", "Expedição"]
         setores = [Sector(name=n, description=f"Setor de {n}") for n in setor_nomes]
         db.add_all(setores)
         await db.flush()
 
-        # ── Usuários ─────────────────────────────────────────────────────────
         gestor = User(
             name="Admin EPIsee",
             email="admin@episee.com",
@@ -65,7 +59,6 @@ async def seed():
 
         await db.flush()
 
-        # ── Câmeras ───────────────────────────────────────────────────────────
         cameras = []
         for i, setor in enumerate(setores):
             for j in range(2):
@@ -81,15 +74,13 @@ async def seed():
 
         await db.flush()
 
-        # ── Ocorrências (últimos 30 dias) ─────────────────────────────────────
         epi_tipos = ["Capacete", "Luvas", "Óculos", "Colete", "Botina", "Protetor auricular"]
         now = datetime.utcnow()
 
         for days_ago in range(30):
             base_ts = now - timedelta(days=days_ago)
-            # Mais ocorrências nos últimos dias (tendência crescente de conformidade)
             qtd = random.randint(8, 20)
-            compliance_bias = 0.6 + (30 - days_ago) / 30 * 0.3  # 60% → 90%
+            compliance_bias = 0.6 + (30 - days_ago) / 30 * 0.3
 
             for _ in range(qtd):
                 cam = random.choice(cameras)
@@ -116,7 +107,6 @@ async def seed():
                 )
                 db.add(occ)
 
-        # ── Solicitações de EPI ───────────────────────────────────────────────
         epis_solicitados = ["Capacete", "Luvas de proteção", "Óculos de segurança",
                             "Colete refletivo", "Botina de segurança", "Protetor auricular"]
         statuses = [EPIRequestStatus.pendente] * 4 + \
