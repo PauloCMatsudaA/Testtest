@@ -1,72 +1,69 @@
-"""
-Testes básicos do chatbot EPIsee.
-Execute: pytest tests/ -v
-
-IMPORTANTE: Requer OPENAI_API_KEY configurado no .env para os testes de integração.
-"""
 import pytest
-import json
-from pathlib import Path
+from unittest.mock import AsyncMock, MagicMock, patch
+from app.services.chat_service import generate_response, conversation_histories
+from app.rag.retriever import retrieve
 
+def test_retrieve_returns_list():
+    with patch("app.rag.retriever._load_index_and_metadata") as mock_load:
+        mock_load.return_value = (None, None)
+        result = retrieve("teste")
+        assert isinstance(result, list)
+        assert result == []
 
-# ── Testes unitários (sem API) ──────────────────────────────────────────────
-
-def test_nr6_chunks_existem():
-    """Verifica se os chunks da NR-6 foram criados corretamente."""
-    chunks_path = Path("data/nr6_chunks/nr6_base.json")
-    assert chunks_path.exists(), "Arquivo de chunks da NR-6 não encontrado."
-
-    with open(chunks_path, encoding="utf-8") as f:
-        chunks = json.load(f)
-
-    assert len(chunks) > 0, "A base de conhecimento está vazia."
-    for chunk in chunks:
-        assert "id" in chunk, f"Chunk sem 'id': {chunk}"
-        assert "titulo" in chunk, f"Chunk sem 'titulo': {chunk}"
-        assert "texto" in chunk, f"Chunk sem 'texto': {chunk}"
-        assert len(chunk["texto"]) > 50, f"Texto muito curto no chunk '{chunk['id']}'"
-
-
-def test_config_carrega():
-    """Verifica se o arquivo .env.example tem todos os campos necessários."""
-    env_example = Path(".env.example").read_text(encoding="utf-8")
-    campos_obrigatorios = [
-        "OPENAI_API_KEY",
-        "WHATSAPP_PHONE_NUMBER_ID",
-        "WHATSAPP_ACCESS_TOKEN",
-        "WHATSAPP_VERIFY_TOKEN",
+def test_retrieve_with_mock_index():
+    import numpy as np
+    mock_index = MagicMock()
+    mock_index.search.return_value = (np.array([[0.9, 0.8]]), np.array([[0, 1]]))
+    mock_metadata = [
+        {"text": "EPI é equipamento de proteção individual", "chunk_id": 0},
+        {"text": "Capacete protege a cabeça", "chunk_id": 1},
     ]
-    for campo in campos_obrigatorios:
-        assert campo in env_example, f"Campo '{campo}' não encontrado no .env.example"
 
+    with patch("app.rag.retriever._load_index_and_metadata") as mock_load:
+        mock_load.return_value = (mock_index, mock_metadata)
+        with patch("app.rag.retriever.client.embeddings.create") as mock_embed:
+            mock_response = MagicMock()
+            mock_response.data = [MagicMock(embedding=[0.1] * 1536)]
+            mock_embed.return_value = mock_response
 
-def test_estrutura_projeto():
-    """Verifica se todos os arquivos do projeto estão presentes."""
-    arquivos_esperados = [
-        "main.py",
-        "requirements.txt",
-        ".env.example",
-        "app/api/webhook.py",
-        "app/core/config.py",
-        "app/rag/indexer.py",
-        "app/rag/retriever.py",
-        "app/services/chat_service.py",
-        "app/services/audio_service.py",
-        "app/services/whatsapp_service.py",
-        "data/nr6_chunks/nr6_base.json",
-    ]
-    for arquivo in arquivos_esperados:
-        assert Path(arquivo).exists(), f"Arquivo não encontrado: {arquivo}"
+            results = retrieve("o que é EPI?", top_k=2)
 
+            assert len(results) == 2
+            assert "EPI é equipamento de proteção individual" in results
 
+@pytest.mark.asyncio
+async def test_generate_response_creates_history():
+    session_id = "test_session_unit"
+    if session_id in conversation_histories:
+        del conversation_histories[session_id]
 
-@pytest.mark.integration
-def test_indexer_gera_indice(tmp_path, monkeypatch):
-    """Testa se o indexer consegue criar o índice FAISS (requer OpenAI API)."""
-    pytest.skip("Teste de integração — requer OPENAI_API_KEY válida")
+    mock_response = MagicMock()
+    mock_response.choices = [MagicMock()]
+    mock_response.choices[0].message.content = "Resposta de teste"
 
+    with patch("app.services.chat_service.client.chat.completions.create", new_callable=AsyncMock) as mock_create:
+        mock_create.return_value = mock_response
+        with patch("app.services.chat_service.retrieve") as mock_retrieve:
+            mock_retrieve.return_value = []
 
-@pytest.mark.integration  
-def test_chat_responde_pergunta_epi():
-    """Testa uma pergunta real ao chatbot (requer OpenAI API)."""
-    pytest.skip("Teste de integração — requer OPENAI_API_KEY válida e índice gerado")
+            response = await generate_response("O que é EPI?", session_id)
+
+            assert response == "Resposta de teste"
+            assert session_id in conversation_histories
+            assert len(conversation_histories[session_id]) == 2
+
+@pytest.mark.asyncio
+async def test_conversation_history_truncation():
+    session_id = "test_truncation"
+    conversation_histories[session_id] = [{"role": "user", "content": f"msg {i}"} for i in range(20)]
+
+    mock_response = MagicMock()
+    mock_response.choices = [MagicMock()]
+    mock_response.choices[0].message.content = "OK"
+
+    with patch("app.services.chat_service.client.chat.completions.create", new_callable=AsyncMock) as mock_create:
+        mock_create.return_value = mock_response
+        with patch("app.services.chat_service.retrieve") as mock_retrieve:
+            mock_retrieve.return_value = []
+            await generate_response("mais uma", session_id)
+            assert len(conversation_histories[session_id]) <= 20

@@ -1,84 +1,70 @@
-"""
-RAG Indexer — Cria e salva o índice FAISS com embeddings da NR-6.
-Execute este script uma vez para gerar o índice:
-    python -m app.rag.indexer
-"""
 import json
-import pickle
 import os
 import numpy as np
-from pathlib import Path
+import faiss
 from openai import OpenAI
-from app.core.config import get_settings
-import glob
+from app.core.config import settings
+
+client = OpenAI(api_key=settings.OPENAI_API_KEY)
 
 EMBEDDING_MODEL = "text-embedding-3-small"
-arquivos = glob.glob("data/nr6_chunks/*.json")
-todos_chunks = []
-for arquivo in arquivos:
-    with open(arquivo, "r", encoding="utf-8") as f:
-        todos_chunks.extend(json.load(f))
+EMBEDDING_DIM = 1536
 
 def load_chunks(chunks_path: str) -> list[dict]:
-    """Carrega todos os arquivos JSON da pasta de chunks."""
     chunks = []
-    for file in Path(chunks_path).glob("*.json"):
-        with open(file, encoding="utf-8") as f:
-            data = json.load(f)
-            chunks.extend(data)
+    for filename in os.listdir(chunks_path):
+        if filename.endswith(".json"):
+            filepath = os.path.join(chunks_path, filename)
+            with open(filepath, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                if isinstance(data, list):
+                    chunks.extend(data)
+                elif isinstance(data, dict):
+                    chunks.append(data)
     return chunks
 
-
-def get_embeddings(texts: list[str], client: OpenAI) -> np.ndarray:
-    """Gera embeddings para uma lista de textos via OpenAI."""
+def get_embeddings(texts: list[str]) -> np.ndarray:
     response = client.embeddings.create(
         model=EMBEDDING_MODEL,
-        input=texts,
+        input=texts
     )
-    return np.array([item.embedding for item in response.data], dtype="float32")
+    embeddings = [item.embedding for item in response.data]
+    return np.array(embeddings, dtype=np.float32)
 
+def build_index(chunks_path: str, index_path: str):
+    print(f"Loading chunks from {chunks_path}...")
+    chunks = load_chunks(chunks_path)
+    print(f"Loaded {len(chunks)} chunks")
 
-def build_index():
-    """Constrói e salva o índice FAISS + metadados dos chunks."""
-    import faiss
+    texts = [chunk.get("text", "") or chunk.get("content", "") for chunk in chunks]
+    texts = [t for t in texts if t.strip()]
 
-    settings = get_settings()
-    client = OpenAI(api_key=settings.openai_api_key)
+    print("Generating embeddings...")
+    batch_size = 100
+    all_embeddings = []
+    for i in range(0, len(texts), batch_size):
+        batch = texts[i:i + batch_size]
+        embeddings = get_embeddings(batch)
+        all_embeddings.append(embeddings)
+        print(f"  Processed {min(i + batch_size, len(texts))}/{len(texts)} chunks")
 
-    print("Carregando chunks da NR-6...")
-    chunks = load_chunks(settings.nr6_chunks_path)
-    print(f"  → {len(chunks)} chunks encontrados.")
+    all_embeddings = np.vstack(all_embeddings)
 
-    texts = [
-    f"{c.get('titulo') or c.get('secao') or c.get('fonte', '')}\n{c['texto']}"
-    for c in chunks
-]
-    print("Gerando embeddings via OpenAI...")
-    embeddings = get_embeddings(texts, client)
-    print(f"  → Embeddings gerados: shape {embeddings.shape}")
+    index = faiss.IndexFlatIP(EMBEDDING_DIM)
+    faiss.normalize_L2(all_embeddings)
+    index.add(all_embeddings)
 
-    # Normaliza para busca por cosseno
-    faiss.normalize_L2(embeddings)
+    os.makedirs(index_path, exist_ok=True)
+    faiss.write_index(index, os.path.join(index_path, "index.faiss"))
 
-    # Cria índice FAISS (Inner Product = cosseno após normalização)
-    dim = embeddings.shape[1]
-    index = faiss.IndexFlatIP(dim)
-    index.add(embeddings)
+    metadata = [{"text": texts[i], "chunk_id": i} for i in range(len(texts))]
+    with open(os.path.join(index_path, "metadata.json"), "w", encoding="utf-8") as f:
+        json.dump(metadata, f, ensure_ascii=False, indent=2)
 
-    # Salva índice e metadados
-    index_path = Path(settings.faiss_index_path)
-    index_path.parent.mkdir(parents=True, exist_ok=True)
-
-    faiss.write_index(index, str(index_path))
-
-    metadata_path = index_path.with_suffix(".meta.pkl")
-    with open(metadata_path, "wb") as f:
-        pickle.dump(chunks, f)
-
-    print(f"Índice salvo em: {index_path}")
-    print(f"Metadados salvos em: {metadata_path}")
-    print("Indexação concluída.")
-
+    print(f"Index built with {len(texts)} vectors and saved to {index_path}")
 
 if __name__ == "__main__":
-    build_index()
+    build_index(
+        chunks_path=settings.RAG_CHUNKS_PATH,
+        index_path=settings.RAG_INDEX_PATH
+    )

@@ -1,73 +1,27 @@
-"""
-EPIsee Chatbot — Endpoint direto para o app mobile.
-
-Rota:
-    POST /chat
-    Body:  { "message": "string", "phone": "string" }
-    Retorno: { "reply": "string" }
-
-Não depende do WhatsApp — usado diretamente pelo ChatScreen do app.
-"""
-import logging
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel, Field
-from app.services.chat_service import get_chat_response, clear_history
+from pydantic import BaseModel
+from app.services.chat_service import generate_response
 
-logger = logging.getLogger(__name__)
 router = APIRouter()
 
-
 class ChatRequest(BaseModel):
-    message: str = Field(..., min_length=1, max_length=2000)
-    phone: str = Field(default="app-user")
-
+    message: str
+    session_id: str = "default"
 
 class ChatResponse(BaseModel):
-    reply: str
-
-
-class ResetResponse(BaseModel):
-    message: str
-
+    response: str
+    session_id: str
 
 @router.post("/chat", response_model=ChatResponse)
-async def chat(body: ChatRequest):
-    """
-    Recebe uma mensagem do app mobile e retorna a resposta do chatbot.
-    Usa o mesmo chat_service do WhatsApp — histórico compartilhado por 'phone'.
-    """
-    if not body.message.strip():
-        raise HTTPException(status_code=400, detail="Mensagem não pode ser vazia.")
+async def chat(request: ChatRequest):
+    if not request.message.strip():
+        raise HTTPException(status_code=400, detail="Message cannot be empty")
+    response = await generate_response(request.message, request.session_id)
+    return ChatResponse(response=response, session_id=request.session_id)
 
-    logger.info(f"[Chat App] Mensagem de '{body.phone}': {body.message[:80]}")
-
-    try:
-        resposta = get_chat_response(
-            user_id=body.phone,
-            user_message=body.message.strip(),
-        )
-        logger.info(f"[Chat App] Resposta para '{body.phone}': {resposta[:80]}")
-        return {"reply": resposta}
-
-    except Exception as e:
-        logger.error(f"[Chat App] Erro ao processar mensagem: {e}", exc_info=True)
-        raise HTTPException(
-            status_code=500,
-            detail="Erro interno ao processar sua mensagem. Tente novamente.",
-        )
-
-
-@router.post("/chat/reset", response_model=ResetResponse)
-async def reset_chat(phone: str = "app-user"):
-    """
-    Limpa o histórico de conversa de um usuário específico.
-    Útil para o botão 'Nova conversa' no app.
-    """
-    clear_history(phone)
-    logger.info(f"[Chat App] Histórico resetado para '{phone}'")
-    return {"message": "Conversa reiniciada com sucesso."}
-
-
-@router.get("/chat/health", tags=["Health"])
-async def chat_health():
-    return {"status": "ok", "endpoint": "/chat"}
+@router.delete("/chat/{session_id}")
+async def clear_session(session_id: str):
+    from app.services.chat_service import conversation_histories
+    if session_id in conversation_histories:
+        del conversation_histories[session_id]
+    return {"message": f"Session {session_id} cleared"}

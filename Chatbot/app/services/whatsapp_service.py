@@ -1,86 +1,33 @@
-"""
-WhatsApp Service — Envio de mensagens via WhatsApp Cloud API (Meta).
-"""
 import httpx
-from app.core.config import get_settings
+from app.core.config import settings
+import logging
 
-settings = get_settings()
+logger = logging.getLogger(__name__)
 
-WHATSAPP_API_URL = (
-    f"https://graph.facebook.com/v20.0/{settings.whatsapp_phone_number_id}/messages"
-)
+WHATSAPP_API_URL = "https://graph.facebook.com/v18.0"
 
-HEADERS = {
-    "Authorization": f"Bearer {settings.whatsapp_access_token}",
-    "Content-Type": "application/json",
-}
-
-
-async def send_text_message(to: str, text: str) -> dict:
-    """
-    Envia uma mensagem de texto via WhatsApp.
-
-    Args:
-        to: Número de destino no formato internacional sem '+' (ex: "5541999999999")
-        text: Texto da mensagem
-
-    Returns:
-        Resposta da API do Meta
-    """
+async def send_whatsapp_message(to: str, message: str) -> bool:
+    url = f"{WHATSAPP_API_URL}/{settings.WHATSAPP_PHONE_NUMBER_ID}/messages"
+    headers = {
+        "Authorization": f"Bearer {settings.WHATSAPP_ACCESS_TOKEN}",
+        "Content-Type": "application/json"
+    }
     payload = {
         "messaging_product": "whatsapp",
         "to": to,
         "type": "text",
-        "text": {"body": text},
+        "text": {"body": message}
     }
 
     async with httpx.AsyncClient() as client:
-        response = await client.post(WHATSAPP_API_URL, json=payload, headers=HEADERS)
-        response.raise_for_status()
-        return response.json()
-
-
-async def send_audio_message(to: str, audio_url: str) -> dict:
-    """
-    Envia uma mensagem de áudio via WhatsApp (URL pública do arquivo).
-
-    Args:
-        to: Número de destino
-        audio_url: URL pública do arquivo de áudio MP3
-
-    Returns:
-        Resposta da API do Meta
-    """
-    payload = {
-        "messaging_product": "whatsapp",
-        "to": to,
-        "type": "audio",
-        "audio": {"link": audio_url},
-    }
-
-    async with httpx.AsyncClient() as client:
-        response = await client.post(WHATSAPP_API_URL, json=payload, headers=HEADERS)
-        response.raise_for_status()
-        return response.json()
-
-
-async def mark_as_read(message_id: str) -> dict:
-    """
-    Marca uma mensagem como lida (aparece os dois tiques azuis para o usuário).
-
-    Args:
-        message_id: ID da mensagem recebida
-
-    Returns:
-        Resposta da API do Meta
-    """
-    payload = {
-        "messaging_product": "whatsapp",
-        "status": "read",
-        "message_id": message_id,
-    }
-
-    async with httpx.AsyncClient() as client:
-        response = await client.post(WHATSAPP_API_URL, json=payload, headers=HEADERS)
-        response.raise_for_status()
-        return response.json()
+        try:
+            response = await client.post(url, headers=headers, json=payload)
+            response.raise_for_status()
+            logger.info(f"Message sent to {to}")
+            return True
+        except httpx.HTTPStatusError as e:
+            logger.error(f"Failed to send message to {to}: {e.response.text}")
+            return False
+        except Exception as e:
+            logger.error(f"Unexpected error sending message: {e}")
+            return False

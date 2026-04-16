@@ -1,106 +1,55 @@
-"""
-Chat Service — Lógica principal do chatbot EPIsee.
-Gerencia histórico por usuário, contexto RAG e chamadas ao GPT-4o.
-"""
-from collections import defaultdict, deque
-from openai import OpenAI
-from app.core.config import get_settings
-from app.rag.retriever import retrieve_relevant_chunks, format_context
+from openai import AsyncOpenAI
+from app.core.config import settings
+from app.rag.retriever import retrieve
 
-settings = get_settings()
+client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
 
-# Cliente OpenAI (singleton)
-openai_client = OpenAI(api_key=settings.openai_api_key)
+conversation_histories: dict[str, list] = {}
 
-# Histórico por número de WhatsApp: { "5541999999999": deque([mensagens]) }
-_conversation_history: dict[str, deque] = defaultdict(
-    lambda: deque(maxlen=settings.max_history_messages)
-)
+SYSTEM_PROMPT = """Você é um assistente especializado na Norma Regulamentadora 6 (NR-6) do Ministério do Trabalho e Emprego do Brasil, que trata de Equipamentos de Proteção Individual (EPIs).
 
-SYSTEM_PROMPT = """Você é o assistente virtual do EPIsee, um sistema de segurança do trabalho focado em Equipamentos de Proteção Individual (EPIs).
+Sua função é:
+1. Responder perguntas sobre EPIs, suas obrigações legais, tipos, usos corretos e normas
+2. Ajudar trabalhadores e gestores a entender seus direitos e deveres relativos aos EPIs
+3. Fornecer informações precisas baseadas na NR-6 e documentos relacionados
 
-Seu papel é:
-1. Orientar trabalhadores sobre o uso correto dos EPIs com base na NR-6
-2. Esclarecer dúvidas sobre direitos do trabalhador e obrigações da empresa
-3. Informar quais EPIs são necessários para cada tipo de atividade
-4. Orientar sobre como solicitar substituição de EPIs danificados
-5. Conscientizar sobre a importância do uso correto dos equipamentos
+Diretrizes:
+- Seja claro, objetivo e use linguagem acessível
+- Cite a NR-6 quando relevante
+- Se não souber algo, diga que não tem certeza
+- Responda sempre em português
+- Mantenha respostas concisas mas completas"""
 
-REGRAS IMPORTANTES:
-- Responda SEMPRE em português brasileiro, de forma clara e acessível
-- Use linguagem simples, evitando jargões técnicos desnecessários
-- Quando houver informação da NR-6 no contexto fornecido, baseie sua resposta nela
-- Seja objetivo: respostas entre 3-6 parágrafos, salvo quando mais detalhes forem necessários
-- Se o trabalhador relatar um risco grave e imediato, oriente-o a parar a atividade e acionar o responsável de segurança
-- Nunca invente normas ou legislações que não existem
-- Se não souber a resposta, diga que não tem essa informação e sugira consultar o técnico de segurança da empresa ou o site do MTE (gov.br)
-- Ao final de respostas sobre EPIs específicos, sempre lembre: "Em caso de dúvida, consulte o técnico de segurança da sua empresa."
+async def generate_response(user_message: str, session_id: str) -> str:
+    if session_id not in conversation_histories:
+        conversation_histories[session_id] = []
 
-Você pode receber perguntas via texto ou transcrições de áudio. Trate ambas da mesma forma."""
+    history = conversation_histories[session_id]
 
+    context_chunks = retrieve(user_message)
+    context_text = ""
+    if context_chunks:
+        context_text = "\n\nContexto relevante da NR-6:\n" + "\n---\n".join(context_chunks)
 
-def get_chat_response(user_id: str, user_message: str) -> str:
-    """
-    Processa a mensagem do usuário e retorna a resposta do chatbot.
+    messages = [
+        {"role": "system", "content": SYSTEM_PROMPT + context_text},
+        *history,
+        {"role": "user", "content": user_message}
+    ]
 
-    Args:
-        user_id: Número de WhatsApp do usuário (ex: "5541999999999")
-        user_message: Texto da pergunta do usuário
-
-    Returns:
-        Resposta em texto do chatbot
-    """
-    # 1. Recuperar chunks relevantes da NR-6 via RAG
-    try:
-        relevant_chunks = retrieve_relevant_chunks(
-            query=user_message,
-            client=openai_client,
-            top_k=settings.top_k_chunks,
-        )
-        rag_context = format_context(relevant_chunks)
-    except FileNotFoundError:
-        # Índice ainda não foi gerado — funciona sem RAG (fallback)
-        rag_context = ""
-
-    # 2. Montar mensagens para a API
-    history = _conversation_history[user_id]
-
-    messages = [{"role": "system", "content": SYSTEM_PROMPT}]
-
-    # Injeta contexto RAG como mensagem do sistema (se houver)
-    if rag_context:
-        messages.append({
-            "role": "system",
-            "content": (
-                "Use as informações abaixo da NR-6 para responder com precisão:\n\n"
-                + rag_context
-            ),
-        })
-
-    # Histórico de conversa
-    messages.extend(list(history))
-
-    # Mensagem atual do usuário
-    messages.append({"role": "user", "content": user_message})
-
-    # 3. Chamar GPT-4o
-    response = openai_client.chat.completions.create(
-        model=settings.gpt_model,
+    response = await client.chat.completions.create(
+        model=settings.CHATBOT_MODEL,
         messages=messages,
-        max_tokens=settings.max_tokens_response,
-        temperature=0.3,  # Baixa para respostas mais precisas/consistentes
+        max_tokens=settings.CHATBOT_MAX_TOKENS,
+        temperature=settings.CHATBOT_TEMPERATURE
     )
 
-    assistant_message = response.choices[0].message.content.strip()
+    assistant_message = response.choices[0].message.content
 
-    # 4. Atualizar histórico
     history.append({"role": "user", "content": user_message})
     history.append({"role": "assistant", "content": assistant_message})
 
+    if len(history) > 20:
+        conversation_histories[session_id] = history[-20:]
+
     return assistant_message
-
-
-def clear_history(user_id: str):
-    """Limpa o histórico de conversa de um usuário."""
-    if user_id in _conversation_history:
-        _conversation_history[user_id].clear()

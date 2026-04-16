@@ -1,31 +1,22 @@
 from pydantic_settings import BaseSettings
-from functools import lru_cache
-
 
 class Settings(BaseSettings):
-    # OpenAI
-    openai_api_key: str
+    OPENAI_API_KEY: str = ""
 
-    # WhatsApp
-    whatsapp_phone_number_id: str
-    whatsapp_access_token: str
-    whatsapp_verify_token: str = "episee_webhook_token"
+    WHATSAPP_ACCESS_TOKEN: str = ""
+    WHATSAPP_PHONE_NUMBER_ID: str = ""
+    WHATSAPP_VERIFY_TOKEN: str = "episee_verify_token"
 
-    # Chatbot
-    gpt_model: str = "gpt-4o"
-    max_history_messages: int = 10
-    max_tokens_response: int = 800
+    CHATBOT_MODEL: str = "gpt-4o-mini"
+    CHATBOT_MAX_TOKENS: int = 1024
+    CHATBOT_TEMPERATURE: float = 0.3
 
-    # RAG
-    faiss_index_path: str = "data/faiss_index.bin"
-    nr6_chunks_path: str = "data/nr6_chunks"
-    top_k_chunks: int = 4
+    RAG_INDEX_PATH: str = "data/nr6_faiss"
+    RAG_CHUNKS_PATH: str = "data/nr6_chunks"
+    RAG_TOP_K: int = 5
 
     class Config:
         env_file = ".env"
-        env_file_encoding = "utf-8"
+        extra = "ignore"
 
-
-@lru_cache()
-def get_settings() -> Settings:
-    return Settings()
+settings = Settings()

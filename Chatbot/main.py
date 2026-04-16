@@ -1,49 +1,39 @@
-"""
-EPIsee Chatbot — Entry point da aplicação FastAPI.
-
-Execução:
-    uvicorn main:app --host 0.0.0.0 --port 8001 --reload
-"""
-import logging
+import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.api.webhook import router as webhook_router
-from app.api.chat import router as chat_router
+import logging
 
-# Logging
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(name)s — %(message)s",
-)
+from app.api.chat import router as chat_router
+from app.api.webhook import router as webhook_router
+from app.core.config import settings
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 app = FastAPI(
     title="EPIsee Chatbot",
-    description="Chatbot especialista em EPIs via WhatsApp e App Mobile — NR-6, direitos do trabalhador e orientações de segurança.",
-    version="1.0.0",
+    version="1.0.0"
 )
 
-# CORS — necessário para o app mobile e painel web
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# ── Rotas ─────────────────────────────────────────────────────────────────────
-app.include_router(webhook_router, prefix="/api/v1", tags=["WhatsApp Webhook"])
-app.include_router(chat_router, tags=["Chat App Mobile"])
+app.include_router(chat_router, prefix="/api")
+app.include_router(webhook_router, prefix="/webhook")
 
-
-@app.get("/", tags=["Health"])
+@app.get("/health")
 async def health_check():
-    return {
-        "status": "online",
-        "service": "EPIsee Chatbot",
-        "version": "1.0.0",
-    }
+    return {"status": "ok", "service": "EPIsee Chatbot"}
 
-
-@app.get("/health", tags=["Health"])
-async def health():
-    return {"status": "ok"}
+if __name__ == "__main__":
+    uvicorn.run(
+        "main:app",
+        host="0.0.0.0",
+        port=8001,
+        reload=True
+    )
