@@ -2,7 +2,7 @@ from datetime import datetime, date
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, and_
+from sqlalchemy import select, and_
 
 from app.core.database import get_db
 from app.core.deps import get_current_user
@@ -28,7 +28,6 @@ async def list_occurrences(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """List occurrences with optional filters."""
     query = select(Occurrence)
 
     conditions = []
@@ -41,7 +40,6 @@ async def list_occurrences(
     if end_date:
         conditions.append(Occurrence.timestamp <= datetime.combine(end_date, datetime.max.time()))
 
-    # Trabalhadores only see occurrences from their sector
     if current_user.role == "trabalhador" and current_user.sector_id:
         conditions.append(Occurrence.sector_id == current_user.sector_id)
 
@@ -60,7 +58,6 @@ async def get_occurrence_summary(
     db: AsyncSession = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
-    """Return aggregated occurrence statistics."""
     query = select(Occurrence)
     if sector_id:
         query = query.where(Occurrence.sector_id == sector_id)
@@ -96,7 +93,6 @@ async def get_occurrence(
     db: AsyncSession = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
-    """Get occurrence details by ID."""
     result = await db.execute(select(Occurrence).where(Occurrence.id == occurrence_id))
     occurrence = result.scalar_one_or_none()
     if not occurrence:
@@ -110,7 +106,6 @@ async def create_occurrence(
     db: AsyncSession = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
-    """Create a new occurrence (used by the detection service)."""
     occurrence = Occurrence(
         camera_id=occurrence_in.camera_id,
         sector_id=occurrence_in.sector_id,
