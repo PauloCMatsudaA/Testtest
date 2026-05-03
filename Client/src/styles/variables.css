@@ -1,32 +1,42 @@
 :root {
-  --brand:        #eb8525;
-  --brand-hover:  #1d4ed8;
-  --brand-light:  rgba(37, 99, 235, 0.12);
+  --brand:          #f59e0b;
+  --brand-hover:    #d97706;
+  --brand-active:   #b45309;
+  --brand-light:    rgba(245, 158, 11, 0.12);
+  --brand-glow:     0 0 20px rgba(245, 158, 11, 0.25);
 
-  --bg:           #f8fafc;
-  --surface:      #ffffff;
-  --border:       #e2e8f0;
-  --border-light: #f1f5f9;
+  --bg:             #0a0c10;
+  --bg-secondary:   #0f1117;
+  --surface:        #13161d;
+  --surface-2:      #181c25;
+  --surface-3:      #1e2330;
+  --border:         rgba(255,255,255,0.07);
+  --border-light:   rgba(255,255,255,0.04);
+  --border-accent:  rgba(245,158,11,0.25);
 
-  --text:         #0f172a;
-  --text-muted:   #64748b;
-  --text-faint:   #94a3b8;
+  --text:           #e8eaf0;
+  --text-muted:     #8892a4;
+  --text-faint:     #4a5568;
+  --text-inverse:   #0a0c10;
 
-  --dark:         #0f172a;
+  --dark:           #0a0c10;
 
-  --ok:           #16a34a;   --ok-bg:   #f0fdf4;  --ok-border:   #bbf7d0;
-  --warn:         #d97706;   --warn-bg: #fffbeb;  --warn-border: #fde68a;
-  --err:          #dc2626;   --err-bg:  #fef2f2;  --err-border:  #fecaca;
-  --info:         #2563eb;   --info-bg: #eff6ff;  --info-border: #bfdbfe;
+  --ok:             #34d399;  --ok-bg:   rgba(52,211,153,0.10);  --ok-border:   rgba(52,211,153,0.25);
+  --warn:           #fbbf24;  --warn-bg: rgba(251,191,36,0.10);  --warn-border: rgba(251,191,36,0.25);
+  --err:            #f87171;  --err-bg:  rgba(248,113,113,0.10); --err-border:  rgba(248,113,113,0.25);
+  --info:           #60a5fa;  --info-bg: rgba(96,165,250,0.10);  --info-border: rgba(96,165,250,0.25);
 
+  --radius-xs: 0.25rem;
   --radius-sm: 0.5rem;
   --radius:    0.75rem;
   --radius-lg: 1rem;
+  --radius-xl: 1.25rem;
 
-  --shadow-sm: 0 1px 3px rgba(0,0,0,0.06);
-  --shadow:    0 4px 12px rgba(0,0,0,0.08);
-  --shadow-lg: 0 20px 60px rgba(0,0,0,0.15);
+  --shadow-sm:  0 1px 3px rgba(0,0,0,0.4), 0 1px 2px rgba(0,0,0,0.3);
+  --shadow:     0 4px 16px rgba(0,0,0,0.5), 0 2px 6px rgba(0,0,0,0.3);
+  --shadow-lg:  0 20px 60px rgba(0,0,0,0.7), 0 8px 24px rgba(0,0,0,0.4);
+  --shadow-brand: 0 4px 20px rgba(245,158,11,0.3);
 
-  --transition: 180ms ease;
-  --nav-width:  16rem;
+  --transition: 180ms cubic-bezier(0.16,1,0.3,1);
+  --nav-width:  15rem;
 }
