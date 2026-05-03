@@ -41,6 +41,9 @@ CONFIANCA_MINIMA = 0.50
 INTERVALO_SALVAR = 600
 YOLO_INTERVALO   = 0.3
 
+FRAME_MAX_WIDTH  = 1280
+FRAME_MAX_HEIGHT = 720
+
 processos_ffmpeg: dict[int, subprocess.Popen] = {}
 tarefas_deteccao: dict[int, asyncio.Task]     = {}
 
@@ -50,6 +53,39 @@ FFMPEG_BIN = (
     shutil.which("ffmpeg")
     or r"C:\ProgramData\chocolatey\bin\ffmpeg.exe"
 )
+
+
+def _normalizar_frame(frame: np.ndarray) -> np.ndarray:
+    h, w = frame.shape[:2]
+    if w > FRAME_MAX_WIDTH or h > FRAME_MAX_HEIGHT:
+        scale = min(FRAME_MAX_WIDTH / w, FRAME_MAX_HEIGHT / h)
+        novo_w = int(w * scale)
+        novo_h = int(h * scale)
+        frame = cv2.resize(frame, (novo_w, novo_h), interpolation=cv2.INTER_AREA)
+    if len(frame.shape) == 2:
+        frame = cv2.cvtColor(frame, cv2.COLOR_GRAY2BGR)
+    return frame
+
+
+def _abrir_captura_legada(url: str) -> cv2.VideoCapture:
+    cap = cv2.VideoCapture(url, cv2.CAP_FFMPEG)
+    if cap.isOpened():
+        return cap
+
+    if isinstance(url, str) and (url.startswith("rtsp://") or url.startswith("rtsps://")):
+        os.environ.setdefault("OPENCV_FFMPEG_CAPTURE_OPTIONS", "rtsp_transport;udp")
+        cap = cv2.VideoCapture(url, cv2.CAP_FFMPEG)
+        if cap.isOpened():
+            return cap
+        del os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"]
+
+        url_http = url.replace("rtsp://", "http://").replace("rtsps://", "https://")
+        cap = cv2.VideoCapture(url_http)
+        if cap.isOpened():
+            return cap
+
+    cap = cv2.VideoCapture(url)
+    return cap
 
 
 def get_model():
@@ -80,7 +116,7 @@ def iniciar_hls(camera_id: int, rtsp_url: str):
         logger.error("[HLS] ffmpeg não encontrado!")
         return
 
-    cmd = [
+    cmd_tcp = [
         FFMPEG_BIN,
         "-rtsp_transport", "tcp",
         "-i", rtsp_url,
@@ -91,12 +127,35 @@ def iniciar_hls(camera_id: int, rtsp_url: str):
         "-hls_flags", "delete_segments",
         "-y", m3u8,
     ]
-    try:
-        proc = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        processos_ffmpeg[camera_id] = proc
-        logger.info(f"[HLS] Iniciado câmera {camera_id}")
-    except Exception as e:
-        logger.error(f"[HLS] Erro ao iniciar ffmpeg: {e}")
+
+    cmd_legado = [
+        FFMPEG_BIN,
+        "-rtsp_transport", "udp",
+        "-allowed_media_types", "video",
+        "-vf", f"scale='min({FRAME_MAX_WIDTH},iw)':'min({FRAME_MAX_HEIGHT},ih)'",
+        "-i", rtsp_url,
+        "-c:v", "libx264",
+        "-preset", "ultrafast",
+        "-tune", "zerolatency",
+        "-profile:v", "baseline",
+        "-level", "3.0",
+        "-an",
+        "-hls_time", "2",
+        "-hls_list_size", "5",
+        "-hls_flags", "delete_segments",
+        "-y", m3u8,
+    ]
+
+    for cmd in (cmd_tcp, cmd_legado):
+        try:
+            proc = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            processos_ffmpeg[camera_id] = proc
+            logger.info(f"[HLS] Iniciado câmera {camera_id}")
+            return
+        except Exception as e:
+            logger.warning(f"[HLS] Tentativa falhou ({cmd[3]}): {e}")
+
+    logger.error(f"[HLS] Não foi possível iniciar stream para câmera {camera_id}")
 
 
 def parar_hls(camera_id: int):
@@ -121,11 +180,11 @@ class FrameReader(Thread):
 
     def run(self):
         logger.info(f"[CAM {self.camera_id}] FrameReader tentando: {self.fonte}")
-        cap = cv2.VideoCapture(self.fonte)
+        cap = _abrir_captura_legada(self.fonte)
 
         if not cap.isOpened():
             fallback = os.path.abspath(VIDEO_FALLBACK)
-            logger.warning(f"[CAM {self.camera_id}] RTSP falhou → fallback: {fallback}")
+            logger.warning(f"[CAM {self.camera_id}] Fonte falhou → fallback: {fallback}")
             self.fonte = fallback
             cap = cv2.VideoCapture(self.fonte)
 
@@ -144,9 +203,12 @@ class FrameReader(Thread):
                 logger.warning(f"[CAM {self.camera_id}] Frame perdido — reconectando em 3s...")
                 cap.release()
                 import time; time.sleep(3)
-                cap = cv2.VideoCapture(self.fonte)
+                cap = _abrir_captura_legada(self.fonte)
+                if not cap.isOpened():
+                    cap = cv2.VideoCapture(os.path.abspath(VIDEO_FALLBACK))
                 continue
 
+            frame = _normalizar_frame(frame)
             self.frame_num += 1
             try:
                 self.frame_q.get_nowait()
@@ -215,7 +277,7 @@ async def salvar_ocorrencia(camera_id: int, sector_id: int, resultado: dict, fra
         img_dir    = f"hls_streams/{camera_id}/frames"
         os.makedirs(img_dir, exist_ok=True)
         image_path = f"{img_dir}/{int(datetime.utcnow().timestamp())}.jpg"
-        cv2.imwrite(image_path, frame)
+        cv2.imwrite(image_path, frame, [cv2.IMWRITE_JPEG_QUALITY, 85])
     except Exception as e:
         logger.warning(f"[CAM {camera_id}] Erro ao salvar frame: {e}")
 
@@ -362,10 +424,12 @@ async def analyze_frame(camera_id: int, frame_data: bytes) -> dict:
             "status": "erro", "detections": [], "epi_detected": [],
             "epis_ausentes": [], "pessoa_detectada": False, "confidence": 0.0,
         }
+    frame = _normalizar_frame(frame)
     deteccoes = inferir_frame(frame)
     return avaliar_deteccoes(deteccoes)
 
 
 async def analisar_frame(camera_id: int, frame: np.ndarray) -> dict:
+    frame = _normalizar_frame(frame)
     deteccoes = await asyncio.get_event_loop().run_in_executor(None, inferir_frame, frame)
     return avaliar_deteccoes(deteccoes)
