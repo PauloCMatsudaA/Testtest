@@ -55,6 +55,7 @@ export const ocorrenciasApi = {
 
 export const dashboardApi = {
   estatisticas: () => cliente.get("/api/dashboard/stats"),
+  metricas:     () => cliente.get("/api/dashboard/stats"),
 };
 
 export const relatoriosApi = {

@@ -18,12 +18,14 @@ export default function Cabecalho({ titulo, aoAbrirMenu }) {
 
   const buscarNotificacoes = useCallback(async () => {
     try {
-      const res  = await notificacoesApi.listar();
+      const res   = await notificacoesApi.listar();
       const lista = res.data || [];
       setNotificacoes(lista);
       setNaoLidas(lista.filter(n => !n.lida).length);
     } catch (err) {
-      console.warn('[Notificações] Erro ao buscar:', err?.response?.status);
+      const status = err?.response?.status;
+      const msg    = err?.code || err?.message || 'sem conexão';
+      console.warn('[Notificações] Erro ao buscar:', status ?? msg);
     }
   }, []);
 
