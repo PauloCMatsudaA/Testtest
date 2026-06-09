@@ -19,6 +19,14 @@ engine = create_async_engine(DATABASE_URL, echo=False)
 AsyncSessionLocal = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
+# EPIs essenciais por setor (mapeamento explícito para cada área)
+SETOR_EPIS = {
+    "Produção": ["Capacete", "Luvas", "Óculos de segurança", "Botina de segurança", "Protetor auricular"],
+    "Manutenção": ["Capacete", "Luvas", "Óculos de segurança", "Botina de segurança", "Cinto de segurança"],
+    "Almoxarifado": ["Colete refletivo", "Botina de segurança", "Luvas"],
+    "Expedição": ["Colete refletivo", "Botina de segurança", "Luvas", "Capacete"],
+}
+
 
 async def seed():
     async with engine.begin() as conn:
@@ -26,7 +34,14 @@ async def seed():
 
     async with AsyncSessionLocal() as db:
         setor_nomes = ["Produção", "Manutenção", "Almoxarifado", "Expedição"]
-        setores = [Sector(name=n, description=f"Setor de {n}") for n in setor_nomes]
+        setores = [
+            Sector(
+                name=n,
+                description=f"Setor de {n}",
+                required_epis=SETOR_EPIS[n],
+            )
+            for n in setor_nomes
+        ]
         db.add_all(setores)
         await db.flush()
 
@@ -129,13 +144,17 @@ async def seed():
 
         await db.commit()
         print("✅ Banco populado com sucesso!")
-        print(f"   • {len(setores)} setores")
+        print(f"   • {len(setores)} setores (com EPIs essenciais cadastrados)")
         print(f"   • {1 + len(trabalhadores)} usuários (1 gestor + {len(trabalhadores)} trabalhadores)")
         print(f"   • {len(cameras)} câmeras")
         print(f"   • ~{30 * 14} ocorrências (30 dias)")
         print(f"   • 11 solicitações de EPI")
         print()
         print("Login: admin@episee.com / admin123")
+        print()
+        print("EPIs essenciais por setor:")
+        for nome, epis in SETOR_EPIS.items():
+            print(f"  {nome}: {', '.join(epis)}")
 
 
 if __name__ == "__main__":

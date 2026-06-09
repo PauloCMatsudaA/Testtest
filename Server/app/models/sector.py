@@ -1,7 +1,9 @@
 from datetime import datetime
+from typing import List
 from sqlalchemy import Column, Integer, String, Text, DateTime
 from sqlalchemy.orm import relationship
 from app.core.database import Base
+from sqlalchemy.types import JSON
 
 
 class Sector(Base):
@@ -10,6 +12,9 @@ class Sector(Base):
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String(100), nullable=False, unique=True)
     description = Column(Text, nullable=True)
+    # Lista de EPIs essenciais para detecção neste setor
+    # Ex: ["Capacete", "Luvas", "Óculos de segurança"]
+    required_epis = Column(JSON, nullable=False, default=list)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
     users = relationship("User", back_populates="sector", lazy="selectin")

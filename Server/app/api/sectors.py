@@ -7,9 +7,17 @@ from app.core.database import get_db
 from app.core.deps import get_current_user, get_current_manager
 from app.models.user import User
 from app.models.sector import Sector
-from app.schemas.sector import SectorCreate, SectorUpdate, SectorResponse
+from app.schemas.sector import SectorCreate, SectorUpdate, SectorResponse, EPI_CHOICES
 
 router = APIRouter(prefix="/sectors", tags=["Sectors"])
+
+
+@router.get("/epi-choices", response_model=List[str])
+async def list_epi_choices(
+    _: User = Depends(get_current_user),
+):
+    """Lista todos os EPIs disponíveis para seleção nos setores."""
+    return EPI_CHOICES
 
 
 @router.get("/", response_model=List[SectorResponse])
@@ -17,7 +25,7 @@ async def list_sectors(
     db: AsyncSession = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
-    """List all sectors."""
+    """Lista todos os setores com seus EPIs essenciais."""
     result = await db.execute(select(Sector).order_by(Sector.name))
     sectors = result.scalars().all()
     return [SectorResponse.model_validate(s) for s in sectors]
@@ -29,7 +37,7 @@ async def get_sector(
     db: AsyncSession = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
-    """Get a sector by ID."""
+    """Retorna um setor pelo ID, incluindo os EPIs essenciais."""
     result = await db.execute(select(Sector).where(Sector.id == sector_id))
     sector = result.scalar_one_or_none()
     if not sector:
@@ -43,7 +51,7 @@ async def create_sector(
     db: AsyncSession = Depends(get_db),
     _: User = Depends(get_current_manager),
 ):
-    """Create a new sector. Manager only."""
+    """Cria um novo setor. Apenas gestor. Informe os EPIs essenciais em required_epis."""
     result = await db.execute(select(Sector).where(Sector.name == sector_in.name))
     existing = result.scalar_one_or_none()
     if existing:
@@ -52,7 +60,11 @@ async def create_sector(
             detail="Setor com este nome já existe",
         )
 
-    sector = Sector(name=sector_in.name, description=sector_in.description)
+    sector = Sector(
+        name=sector_in.name,
+        description=sector_in.description,
+        required_epis=sector_in.required_epis,
+    )
     db.add(sector)
     await db.flush()
     await db.refresh(sector)
@@ -66,7 +78,7 @@ async def update_sector(
     db: AsyncSession = Depends(get_db),
     _: User = Depends(get_current_manager),
 ):
-    """Update a sector. Manager only."""
+    """Atualiza um setor. Apenas gestor. Permite atualizar os EPIs essenciais."""
     result = await db.execute(select(Sector).where(Sector.id == sector_id))
     sector = result.scalar_one_or_none()
     if not sector:
@@ -86,7 +98,7 @@ async def delete_sector(
     db: AsyncSession = Depends(get_db),
     _: User = Depends(get_current_manager),
 ):
-    """Delete a sector. Manager only."""
+    """Deleta um setor. Apenas gestor."""
     result = await db.execute(select(Sector).where(Sector.id == sector_id))
     sector = result.scalar_one_or_none()
     if not sector:
