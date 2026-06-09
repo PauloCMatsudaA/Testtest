@@ -2,18 +2,18 @@ from datetime import datetime
 from typing import List, Optional
 from pydantic import BaseModel, Field
 
-# EPIs válidos para seleção nos setores
-EPI_CHOICES = [
-    "Capacete",
-    "Luvas",
-    "Óculos de segurança",
-    "Colete refletivo",
-    "Botina de segurança",
-    "Protetor auricular",
-    "Máscara respiratória",
-    "Avental de proteção",
-    "Cinto de segurança",
-    "Mangote",
+# Classes de detecção YOLO disponíveis no modelo best.pt
+# Esses são os nomes EXATOS que devem ser usados em required_epis
+YOLO_EPI_CLASSES = [
+    "helmet",            # Capacete
+    "gloves",            # Luvas
+    "glasses",           # Óculos de segurança
+    "safety-vest",       # Colete de segurança
+    "earmuffs",          # Protetor auricular
+    "face-mask-medical", # Máscara cirúrgica
+    "face-guard",        # Protetor facial
+    "medical-suit",      # Macacão médico
+    "safety-suit",       # Macacão de segurança
 ]
 
 
@@ -22,8 +22,13 @@ class SectorBase(BaseModel):
     description: Optional[str] = None
     required_epis: List[str] = Field(
         default_factory=list,
-        description="Lista de EPIs essenciais obrigatórios para detecção neste setor.",
-        examples=[["Capacete", "Luvas", "Botina de segurança"]],
+        description=(
+            "Lista de EPIs obrigatórios para detecção neste setor. "
+            "Use os nomes de classe YOLO: helmet, gloves, glasses, "
+            "safety-vest, earmuffs, face-mask-medical, face-guard, "
+            "medical-suit, safety-suit."
+        ),
+        examples=[["helmet", "gloves", "safety-vest"]],
     )
 
 

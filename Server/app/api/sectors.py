@@ -7,17 +7,20 @@ from app.core.database import get_db
 from app.core.deps import get_current_user, get_current_manager
 from app.models.user import User
 from app.models.sector import Sector
-from app.schemas.sector import SectorCreate, SectorUpdate, SectorResponse, EPI_CHOICES
+from app.schemas.sector import SectorCreate, SectorUpdate, SectorResponse, YOLO_EPI_CLASSES
 
 router = APIRouter(prefix="/sectors", tags=["Sectors"])
 
 
-@router.get("/epi-choices", response_model=List[str])
-async def list_epi_choices(
+@router.get("/epi-classes", response_model=List[str])
+async def list_epi_classes(
     _: User = Depends(get_current_user),
 ):
-    """Lista todos os EPIs disponíveis para seleção nos setores."""
-    return EPI_CHOICES
+    """
+    Retorna as classes de EPI detectáveis pelo modelo YOLO.
+    Use esses valores em required_epis ao criar/atualizar um setor.
+    """
+    return YOLO_EPI_CLASSES
 
 
 @router.get("/", response_model=List[SectorResponse])
@@ -25,7 +28,7 @@ async def list_sectors(
     db: AsyncSession = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
-    """Lista todos os setores com seus EPIs essenciais."""
+    """Lista todos os setores com seus EPIs obrigatórios de detecção."""
     result = await db.execute(select(Sector).order_by(Sector.name))
     sectors = result.scalars().all()
     return [SectorResponse.model_validate(s) for s in sectors]
@@ -37,7 +40,7 @@ async def get_sector(
     db: AsyncSession = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
-    """Retorna um setor pelo ID, incluindo os EPIs essenciais."""
+    """Retorna um setor pelo ID, incluindo os EPIs obrigatórios."""
     result = await db.execute(select(Sector).where(Sector.id == sector_id))
     sector = result.scalar_one_or_none()
     if not sector:
@@ -51,7 +54,7 @@ async def create_sector(
     db: AsyncSession = Depends(get_db),
     _: User = Depends(get_current_manager),
 ):
-    """Cria um novo setor. Apenas gestor. Informe os EPIs essenciais em required_epis."""
+    """Cria um setor. Informe required_epis com classes YOLO (ex: helmet, gloves)."""
     result = await db.execute(select(Sector).where(Sector.name == sector_in.name))
     existing = result.scalar_one_or_none()
     if existing:
@@ -78,7 +81,7 @@ async def update_sector(
     db: AsyncSession = Depends(get_db),
     _: User = Depends(get_current_manager),
 ):
-    """Atualiza um setor. Apenas gestor. Permite atualizar os EPIs essenciais."""
+    """Atualiza um setor. Permite alterar required_epis a qualquer momento."""
     result = await db.execute(select(Sector).where(Sector.id == sector_id))
     sector = result.scalar_one_or_none()
     if not sector:

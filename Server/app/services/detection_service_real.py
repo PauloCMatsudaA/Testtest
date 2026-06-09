@@ -35,7 +35,8 @@ CLASSES_EPI = {
     "safety-suit",
 }
 
-EPIS_OBRIGATORIOS = {"helmet"}
+# EPI obrigatório padrão (fallback caso o setor não tenha required_epis configurado)
+EPIS_OBRIGATORIOS_DEFAULT = {"helmet"}
 
 CONFIANCA_MINIMA = 0.50
 INTERVALO_SALVAR = 600
@@ -168,6 +169,39 @@ def parar_hls(camera_id: int):
     logger.info(f"[CAM {camera_id}] Stream e detecção encerrados.")
 
 
+async def buscar_epis_obrigatorios(sector_id: int) -> set[str]:
+    """
+    Busca os EPIs obrigatórios do setor no banco de dados.
+    Os valores em required_epis devem ser nomes de classes YOLO (ex: 'helmet', 'gloves').
+    Retorna EPIS_OBRIGATORIOS_DEFAULT se o setor não tiver EPIs configurados.
+    """
+    try:
+        from app.core.database import AsyncSessionLocal
+        from app.models.sector import Sector
+        from sqlalchemy import select
+
+        async with AsyncSessionLocal() as db:
+            result = await db.execute(select(Sector).where(Sector.id == sector_id))
+            sector = result.scalar_one_or_none()
+
+        if sector and sector.required_epis:
+            # Filtra apenas classes que o modelo conhece
+            epis_validos = {e.lower() for e in sector.required_epis} & CLASSES_EPI
+            if epis_validos:
+                logger.info(f"[SETOR {sector_id}] EPIs obrigatórios: {epis_validos}")
+                return epis_validos
+
+        logger.warning(
+            f"[SETOR {sector_id}] Nenhum EPI configurado ou inválido "
+            f"— usando padrão: {EPIS_OBRIGATORIOS_DEFAULT}"
+        )
+        return EPIS_OBRIGATORIOS_DEFAULT
+
+    except Exception as e:
+        logger.error(f"[SETOR {sector_id}] Erro ao buscar EPIs: {e}")
+        return EPIS_OBRIGATORIOS_DEFAULT
+
+
 class FrameReader(Thread):
 
     def __init__(self, fonte: str, camera_id: int):
@@ -240,11 +274,22 @@ def inferir_frame(frame: np.ndarray) -> list[dict]:
     return deteccoes
 
 
-def avaliar_deteccoes(deteccoes: list[dict]) -> dict:
+def avaliar_deteccoes(deteccoes: list[dict], epis_obrigatorios: set[str] | None = None) -> dict:
+    """
+    Avalia as detecções do frame contra os EPIs obrigatórios do setor.
+
+    Args:
+        deteccoes: Lista de detecções do YOLO.
+        epis_obrigatorios: Conjunto de classes YOLO obrigatórias para o setor.
+                           Se None, usa EPIS_OBRIGATORIOS_DEFAULT.
+    """
+    if epis_obrigatorios is None:
+        epis_obrigatorios = EPIS_OBRIGATORIOS_DEFAULT
+
     classes          = {d["class"] for d in deteccoes}
     pessoa_detectada = bool(classes & CLASSE_PESSOA)
     epis_encontrados = classes & CLASSES_EPI
-    epis_ausentes    = EPIS_OBRIGATORIOS - epis_encontrados
+    epis_ausentes    = epis_obrigatorios - epis_encontrados
 
     if not pessoa_detectada:
         status = "sem_pessoa"
@@ -256,12 +301,13 @@ def avaliar_deteccoes(deteccoes: list[dict]) -> dict:
     confianca = max((d["confidence"] for d in deteccoes), default=0.0)
 
     return {
-        "status":           status,
-        "epi_detected":     list(epis_encontrados),
-        "epis_ausentes":    list(epis_ausentes),
-        "pessoa_detectada": pessoa_detectada,
-        "confidence":       confianca,
-        "detections":       deteccoes,
+        "status":              status,
+        "epi_detected":        list(epis_encontrados),
+        "epis_ausentes":       list(epis_ausentes),
+        "epis_obrigatorios":   list(epis_obrigatorios),
+        "pessoa_detectada":    pessoa_detectada,
+        "confidence":          confianca,
+        "detections":          deteccoes,
     }
 
 
@@ -332,14 +378,24 @@ async def salvar_ocorrencia(camera_id: int, sector_id: int, resultado: dict, fra
 async def processar_stream_camera(camera_id: int, rtsp_url: str, sector_id: int):
     logger.info(f"[CAM {camera_id}] Iniciando detecção real-time → {rtsp_url}")
 
+    # Busca EPIs obrigatórios do setor UMA vez ao iniciar a câmera
+    epis_obrigatorios = await buscar_epis_obrigatorios(sector_id)
+
     reader      = FrameReader(rtsp_url, camera_id)
     reader.start()
     ultimo_save = datetime.min
+    ultimo_reload_epis = datetime.utcnow()
     loop        = asyncio.get_event_loop()
 
     try:
         while True:
             await asyncio.sleep(YOLO_INTERVALO)
+
+            # Recarrega EPIs obrigatórios a cada 5 minutos (para capturar mudanças no banco)
+            agora = datetime.utcnow()
+            if (agora - ultimo_reload_epis).total_seconds() > 300:
+                epis_obrigatorios = await buscar_epis_obrigatorios(sector_id)
+                ultimo_reload_epis = agora
 
             try:
                 frame_num, frame = reader.frame_q.get(timeout=2)
@@ -348,12 +404,13 @@ async def processar_stream_camera(camera_id: int, rtsp_url: str, sector_id: int)
                 continue
 
             deteccoes = await loop.run_in_executor(None, inferir_frame, frame)
-            resultado  = avaliar_deteccoes(deteccoes)
+            resultado  = avaliar_deteccoes(deteccoes, epis_obrigatorios)
 
             logger.info(
                 f"[CAM {camera_id}] Frame {frame_num:05d} | "
                 f"status={resultado['status']} | "
                 f"EPIs={resultado['epi_detected']} | "
+                f"obrigatórios={resultado['epis_obrigatorios']} | "
                 f"faltando={resultado['epis_ausentes']} | "
                 f"conf={resultado['confidence']:.2f}"
             )
@@ -361,7 +418,6 @@ async def processar_stream_camera(camera_id: int, rtsp_url: str, sector_id: int)
             if resultado["status"] != "nao_conforme":
                 continue
 
-            agora = datetime.utcnow()
             if (agora - ultimo_save).total_seconds() < INTERVALO_SALVAR:
                 continue
 
@@ -416,20 +472,34 @@ async def start_camera_streams():
         logger.info("[STARTUP] start_camera_streams encerrado.")
 
 
-async def analyze_frame(camera_id: int, frame_data: bytes) -> dict:
+async def analyze_frame(camera_id: int, frame_data: bytes, sector_id: int | None = None) -> dict:
+    """
+    Analisa um frame avulso (endpoint /detection/analyze-frame).
+    Se sector_id for informado, usa os EPIs obrigatórios do setor.
+    """
     nparr = np.frombuffer(frame_data, np.uint8)
     frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
     if frame is None:
         return {
             "status": "erro", "detections": [], "epi_detected": [],
-            "epis_ausentes": [], "pessoa_detectada": False, "confidence": 0.0,
+            "epis_ausentes": [], "epis_obrigatorios": [], "pessoa_detectada": False, "confidence": 0.0,
         }
     frame = _normalizar_frame(frame)
     deteccoes = inferir_frame(frame)
-    return avaliar_deteccoes(deteccoes)
+
+    if sector_id is not None:
+        epis_obrigatorios = await buscar_epis_obrigatorios(sector_id)
+    else:
+        epis_obrigatorios = EPIS_OBRIGATORIOS_DEFAULT
+
+    return avaliar_deteccoes(deteccoes, epis_obrigatorios)
 
 
-async def analisar_frame(camera_id: int, frame: np.ndarray) -> dict:
+async def analisar_frame(camera_id: int, frame: np.ndarray, sector_id: int | None = None) -> dict:
     frame = _normalizar_frame(frame)
     deteccoes = await asyncio.get_event_loop().run_in_executor(None, inferir_frame, frame)
-    return avaliar_deteccoes(deteccoes)
+    if sector_id is not None:
+        epis_obrigatorios = await buscar_epis_obrigatorios(sector_id)
+    else:
+        epis_obrigatorios = EPIS_OBRIGATORIOS_DEFAULT
+    return avaliar_deteccoes(deteccoes, epis_obrigatorios)

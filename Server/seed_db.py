@@ -19,12 +19,14 @@ engine = create_async_engine(DATABASE_URL, echo=False)
 AsyncSessionLocal = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
-# EPIs essenciais por setor (mapeamento explícito para cada área)
+# EPIs obrigatórios por setor — usando as classes EXATAS do modelo YOLO (best.pt)
+# Classes disponíveis: helmet, gloves, glasses, safety-vest, earmuffs,
+#                      face-mask-medical, face-guard, medical-suit, safety-suit
 SETOR_EPIS = {
-    "Produção": ["Capacete", "Luvas", "Óculos de segurança", "Botina de segurança", "Protetor auricular"],
-    "Manutenção": ["Capacete", "Luvas", "Óculos de segurança", "Botina de segurança", "Cinto de segurança"],
-    "Almoxarifado": ["Colete refletivo", "Botina de segurança", "Luvas"],
-    "Expedição": ["Colete refletivo", "Botina de segurança", "Luvas", "Capacete"],
+    "Produção":     ["helmet", "gloves", "glasses", "safety-vest"],
+    "Manutenção":   ["helmet", "gloves", "glasses"],
+    "Almoxarifado": ["safety-vest", "helmet"],
+    "Expedição":    ["safety-vest", "helmet", "gloves"],
 }
 
 
@@ -89,7 +91,7 @@ async def seed():
 
         await db.flush()
 
-        epi_tipos = ["Capacete", "Luvas", "Óculos", "Colete", "Botina", "Protetor auricular"]
+        epi_tipos = ["helmet", "gloves", "glasses", "safety-vest", "earmuffs"]
         now = datetime.utcnow()
 
         for days_ago in range(30):
@@ -122,8 +124,7 @@ async def seed():
                 )
                 db.add(occ)
 
-        epis_solicitados = ["Capacete", "Luvas de proteção", "Óculos de segurança",
-                            "Colete refletivo", "Botina de segurança", "Protetor auricular"]
+        epis_solicitados = ["helmet", "gloves", "glasses", "safety-vest", "earmuffs"]
         statuses = [EPIRequestStatus.pendente] * 4 + \
                    [EPIRequestStatus.aprovada] * 5 + \
                    [EPIRequestStatus.rejeitada] * 2
@@ -144,15 +145,13 @@ async def seed():
 
         await db.commit()
         print("✅ Banco populado com sucesso!")
-        print(f"   • {len(setores)} setores (com EPIs essenciais cadastrados)")
-        print(f"   • {1 + len(trabalhadores)} usuários (1 gestor + {len(trabalhadores)} trabalhadores)")
+        print(f"   • {len(setores)} setores (com EPIs YOLO configurados)")
+        print(f"   • {1 + len(trabalhadores)} usuários")
         print(f"   • {len(cameras)} câmeras")
         print(f"   • ~{30 * 14} ocorrências (30 dias)")
         print(f"   • 11 solicitações de EPI")
         print()
-        print("Login: admin@episee.com / admin123")
-        print()
-        print("EPIs essenciais por setor:")
+        print("EPIs obrigatórios por setor (classes YOLO):")
         for nome, epis in SETOR_EPIS.items():
             print(f"  {nome}: {', '.join(epis)}")
 
